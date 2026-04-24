@@ -14,7 +14,7 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #world-hud .dim{color:#334}
 #active-banner{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(20,50,130,.95);border:1.5px solid #3a6ad8;border-radius:8px;padding:10px 24px;font-size:14px;cursor:pointer;display:none;white-space:nowrap;transition:background .15s}
 #active-banner:hover{background:rgba(40,70,170,.95)}
-#game-screen{position:fixed;inset:0;display:none;flex-direction:column;background:#0d0d1a}
+#game-screen{position:fixed;inset:0;display:none;flex-direction:column;background:#0e2640}
 #game-header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:#080e22;border-bottom:1px solid #1a2440;flex-shrink:0;min-height:50px}
 .btn{background:#111c38;color:#8ab;border:1px solid #1e3050;padding:6px 14px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:13px;transition:background .12s}
 .btn:hover{background:#1c2d54;color:#ace}
@@ -35,6 +35,9 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #result-info strong{color:#8ab}
 #result-btns{display:flex;gap:12px;justify-content:center}
 #toast{position:fixed;top:58px;left:50%;transform:translateX(-50%);background:rgba(120,40,40,.92);border:1px solid #a44;border-radius:6px;padding:7px 20px;font-size:13px;pointer-events:none;opacity:0;transition:opacity .3s;z-index:100;white-space:nowrap}
+#world-tooltip{position:fixed;display:none;background:rgba(8,14,34,.96);border:1px solid #2a4070;border-radius:6px;padding:8px 14px;font-size:12px;pointer-events:none;z-index:20;line-height:2;white-space:nowrap}
+#world-tooltip .tt-lbl{font-weight:bold}
+#world-tooltip .tt-sub{color:#778;font-size:11px}
 </style>
 </head>
 <body>
@@ -48,6 +51,7 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
     <div class="dim">Drag to pan &nbsp;·&nbsp; Scroll to zoom</div>
     <div id="hud-legend" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 10px;max-width:220px"></div>
   </div>
+  <div id="world-tooltip"><div class="tt-lbl" id="tt-label"></div><div class="tt-sub" id="tt-size"></div></div>
   <div id="active-banner" onclick="resumeActive()">
     ▶ Last game at (<span id="banner-coord">0,0</span>) — click to resume
   </div>
@@ -86,9 +90,9 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 
 // ── Difficulty Tiers ───────────────────────────────────────────────────────
 const TIERS = [
-  { id:'easy',   label:'EASY',   rows:10, cols:10, rate:0.12, weight:40,
+  { id:'easy',   label:'EASY',   rows:10, cols:10, rate:0.10, weight:40,
     fill:'#2c2a24', border:'#d8c8a8', dot:'#ede0c4', text:'#c8b890' },
-  { id:'normal', label:'NORMAL', rows:10, cols:20, rate:0.14, weight:25,
+  { id:'normal', label:'NORMAL', rows:10, cols:20, rate:0.13, weight:25,
     fill:'#1e2c22', border:'#88c8a0', dot:'#a8e0b8', text:'#78b888' },
   { id:'medium', label:'MEDIUM', rows:20, cols:20, rate:0.15, weight:18,
     fill:'#1a2030', border:'#88b4e0', dot:'#a8cef5', text:'#7aaad8' },
@@ -96,13 +100,13 @@ const TIERS = [
     fill:'#221830', border:'#b890e0', dot:'#d0aaf5', text:'#a880d0' },
   { id:'expert', label:'EXPERT', rows:30, cols:30, rate:0.17, weight: 5,
     fill:'#301e14', border:'#e0b070', dot:'#f5c888', text:'#d09050' },
-  { id:'master', label:'MASTER', rows:30, cols:50, rate:0.18, weight: 2,
+  { id:'master', label:'MASTER', rows:30, cols:45, rate:0.19, weight: 2,
     fill:'#301414', border:'#e08080', dot:'#f5a8a8', text:'#d06060' },
 ];
 const TIER_WSUM = TIERS.reduce((s,t)=>s+t.weight, 0);
 
 // ── World Bounds ───────────────────────────────────────────────────────────
-const WORLD_W = 100, WORLD_H = 100;
+const WORLD_W = 50, WORLD_H = 50;
 
 // Deterministic tier from grid coords (stable hash)
 function gridTier(gx, gy) {
@@ -117,7 +121,7 @@ function gridTier(gx, gy) {
 
 // ── World constants ────────────────────────────────────────────────────────
 const TILE = 70, TGAP = 3, TILE2 = TILE + TGAP;
-const NCOL = ['','#5ab4f5','#5ef55e','#f56060','#6060f5','#f5a060','#60f5f5','#f560f5','#aaaaaa'];
+const NCOL = ['','#0033cc','#007700','#cc0000','#00008b','#880000','#008888','#333333','#888888'];
 
 // ── App State ──────────────────────────────────────────────────────────────
 let screen = 'world';
@@ -128,7 +132,7 @@ let viewKey = null;
 const cam = {
   x: 49.5,
   y: 49.5,
-  zoom: Math.min(window.innerWidth, window.innerHeight) * 0.88 / (WORLD_W * TILE2)
+  zoom: 1
 };
 
 let pDown=false, pDragged=false, pStart={x:0,y:0}, pLast={x:0,y:0};
@@ -245,7 +249,16 @@ function chordCell(g, r, c) {
 // ── World Canvas ───────────────────────────────────────────────────────────
 const wCvs = document.getElementById('world-canvas');
 const wCtx = wCvs.getContext('2d');
-function resizeWorld() { wCvs.width=innerWidth; wCvs.height=innerHeight; }
+
+function clampCam() {
+  const hw=wCvs.width/(2*cam.zoom*TILE2), hh=wCvs.height/(2*cam.zoom*TILE2);
+  if (WORLD_W<=2*hw) cam.x=WORLD_W/2;
+  else cam.x=Math.max(hw,Math.min(WORLD_W-hw,cam.x));
+  if (WORLD_H<=2*hh) cam.y=WORLD_H/2;
+  else cam.y=Math.max(hh,Math.min(WORLD_H-hh,cam.y));
+}
+
+function resizeWorld() { wCvs.width=innerWidth; wCvs.height=innerHeight; clampCam(); }
 
 const t2s = (tx,ty) => [
   (tx-cam.x)*cam.zoom*TILE2 + wCvs.width/2,
@@ -268,54 +281,26 @@ function drawWorld() {
   const tw=TILE*cam.zoom, th=tw;
   const pulse=0.5+0.5*Math.sin(Date.now()/400);
 
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-
   for (let ty=ty0;ty<=ty1;ty++) for (let tx=tx0;tx<=tx1;tx++) {
     const [sx,sy]=t2s(tx,ty);
-    const g   = store.get(gKey(tx,ty));
-    const st  = g ? g.status : 'idle';
-    const tier= g ? g.tier  : gridTier(tx,ty);
+    const g    = store.get(gKey(tx,ty));
+    const st   = g ? g.status : 'idle';
+    const tier = g ? g.tier  : gridTier(tx,ty);
 
-    let fill=tier.fill, stroke=tier.border, sw=1;
-
-    if (st==='active') {
-      stroke=tier.dot; sw=1.8+pulse*1.8;
-    } else if (st==='won') {
-      fill='#0a200a'; stroke='#2a6a2a'; sw=1;
-    } else if (st==='lost') {
-      fill='#200a0a'; stroke='#6a2a2a'; sw=1;
-    }
+    let fill;
+    if      (st==='won')  fill='#2a7a3a';
+    else if (st==='lost') fill='#7a2a2a';
+    else                  fill=tier.dot;
 
     ctx.fillStyle=fill; ctx.fillRect(sx,sy,tw,th);
-    ctx.strokeStyle=stroke; ctx.lineWidth=sw;
-    ctx.strokeRect(sx+sw/2,sy+sw/2,tw-sw,th-sw);
 
-    if (cam.zoom>=0.28) {
-      const fs=Math.max(7,Math.floor(tw*0.19));
-      ctx.font=`bold ${fs}px Consolas,monospace`;
-
-      if (st==='won') {
-        ctx.fillStyle='#3a8a3a'; ctx.fillText('WIN',sx+tw/2,sy+th*0.45);
-      } else if (st==='lost') {
-        ctx.fillStyle='#8a3a3a'; ctx.fillText('LOST',sx+tw/2,sy+th*0.45);
-      } else if (st==='active') {
-        ctx.fillStyle=`rgba(${hexToRgb(tier.dot)},${0.55+0.45*pulse})`;
-        ctx.fillText('ACTIVE',sx+tw/2,sy+th*0.45);
-      } else {
-        ctx.fillStyle=tier.text;
-        ctx.fillText(tier.label,sx+tw/2,sy+th*0.42);
-      }
-
-      if (cam.zoom>=0.5) {
-        const fs2=Math.max(6,Math.floor(tw*0.13));
-        ctx.font=`${fs2}px Consolas,monospace`;
-        ctx.fillStyle = st==='idle' ? tier.border : '#2a2a3e';
-        ctx.fillText(`${tier.cols}×${tier.rows}`,sx+tw/2,sy+th*0.65);
-        if (cam.zoom>=0.7) {
-          ctx.fillStyle='#25253a';
-          ctx.fillText(`${tx},${ty}`,sx+tw/2,sy+th-fs2-2);
-        }
-      }
+    if (st==='active') {
+      ctx.fillStyle=`rgba(255,255,255,${0.08+0.14*pulse})`;
+      ctx.fillRect(sx,sy,tw,th);
+      const bw=Math.max(1,Math.round(tw*0.07));
+      ctx.strokeStyle=`rgba(255,255,255,${0.35+0.4*pulse})`;
+      ctx.lineWidth=bw;
+      ctx.strokeRect(sx+bw/2,sy+bw/2,tw-bw,th-bw);
     }
   }
 
@@ -346,7 +331,7 @@ function drawGame() {
   const g=store.get(viewKey); if (!g) return;
   const {rows,cols}=g;
   const ctx=gCtx;
-  ctx.fillStyle='#0d0d1a'; ctx.fillRect(0,0,gCvs.width,gCvs.height);
+  ctx.fillStyle='#0e2640'; ctx.fillRect(0,0,gCvs.width,gCvs.height);
   const over=g.status==='lost'||g.status==='won';
 
   for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) {
@@ -356,32 +341,34 @@ function drawGame() {
     const mine=g.mines[i], hit=i===g.hitIdx;
     const hov=r===hoverR&&c===hoverC&&!over&&g.status==='active'&&!rev;
 
+    // Revealed: light sky-blue. Unrevealed: dark slate-blue (clearly distinct)
     let bg;
-    if (rev)  bg=mine?(hit?'#4a0000':'#200808'):'#15151f';
-    else      bg=flag?'#1c1830':(hov?'#28284a':'#20203a');
+    if (rev)  bg=mine?(hit?'#c03030':'#c8d8e8'):'#b8d4ec';
+    else      bg=flag?'#183a58':(hov?'#2a5a82':'#1e4868');
     ctx.fillStyle=bg; ctx.fillRect(x,y,cs,cs);
 
     if (!rev) {
-      ctx.fillStyle=hov?'#34345a':'#2a2a4e';
+      // 3D raised edge: bright top-left, dark bottom-right
+      ctx.fillStyle=hov?'#3a6a98':'#2a5878';
       ctx.fillRect(x,y,cs,1); ctx.fillRect(x,y,1,cs);
-      ctx.fillStyle='#121220';
+      ctx.fillStyle='#0c2236';
       ctx.fillRect(x,y+cs-1,cs,1); ctx.fillRect(x+cs-1,y,1,cs);
 
       if (flag) {
-        ctx.fillStyle='#d84030';
+        ctx.fillStyle='#e03020';
         ctx.beginPath();
         const fx=x+Math.round(cs*0.25), fy=y+Math.round(cs*0.12);
         const fw=Math.max(4,Math.round(cs*0.38)), fh=Math.max(3,Math.round(cs*0.32));
         ctx.moveTo(fx,fy); ctx.lineTo(fx+fw,fy+fh/2); ctx.lineTo(fx,fy+fh);
         ctx.closePath(); ctx.fill();
-        ctx.fillStyle='#999';
+        ctx.fillStyle='#ccc';
         ctx.fillRect(fx-Math.round(cs*0.07),fy,Math.max(1,Math.round(cs*0.07)),cs-Math.round(cs*0.15));
       } else if (mine&&over) {
-        drawMineIcon(ctx,x+cs/2,y+cs/2,'#5a2020');
+        drawMineIcon(ctx,x+cs/2,y+cs/2,'#884040');
       }
     } else {
       if (mine) {
-        drawMineIcon(ctx,x+cs/2,y+cs/2,hit?'#ff4444':'#cc3333');
+        drawMineIcon(ctx,x+cs/2,y+cs/2,hit?'#dd2222':'#993333');
       } else if (g.nums[i]>0) {
         ctx.fillStyle=NCOL[g.nums[i]];
         ctx.font=`bold ${Math.max(10,cs-3)}px Consolas,monospace`;
@@ -597,6 +584,7 @@ wCvs.addEventListener('pointermove', e=>{
   if (Math.abs(e.clientX-pStart.x)+Math.abs(e.clientY-pStart.y)>5) pDragged=true;
   cam.x -= (e.clientX-pLast.x)/(cam.zoom*TILE2);
   cam.y -= (e.clientY-pLast.y)/(cam.zoom*TILE2);
+  clampCam();
   pLast={x:e.clientX,y:e.clientY};
 });
 wCvs.addEventListener('pointerup', e=>{
@@ -613,8 +601,42 @@ wCvs.addEventListener('wheel', e=>{
   cam.zoom=Math.max(0.05,Math.min(4,cam.zoom*(e.deltaY<0?1.13:1/1.13)));
   const [nx,ny]=s2t(e.clientX,e.clientY);
   cam.x+=wx-nx; cam.y+=wy-ny;
+  clampCam();
   document.getElementById('hud-zoom').textContent=`Zoom: ${cam.zoom.toFixed(2)}×`;
 },{passive:false});
+
+// ── World Hover Tooltip ────────────────────────────────────────────────────
+let wHoverTx=-1, wHoverTy=-1, hoverDelayTO=null, ttMx=0, ttMy=0;
+
+function showTT(gx,gy) {
+  const g=store.get(gKey(gx,gy));
+  const tier=g?g.tier:gridTier(gx,gy);
+  document.getElementById('tt-label').style.color=tier.dot;
+  document.getElementById('tt-label').textContent=tier.label;
+  document.getElementById('tt-size').textContent=`${tier.cols}×${tier.rows}  ·  ${Math.round(tier.rate*100)}% mines`;
+  const el=document.getElementById('world-tooltip'), m=14;
+  el.style.left=(ttMx+m)+'px'; el.style.top=(ttMy+m)+'px'; el.style.display='block';
+  const r=el.getBoundingClientRect();
+  if(r.right>innerWidth)  el.style.left=(ttMx-r.width-m)+'px';
+  if(r.bottom>innerHeight) el.style.top=(ttMy-r.height-m)+'px';
+}
+function hideTT(){ document.getElementById('world-tooltip').style.display='none'; }
+
+wCvs.addEventListener('mousemove', e=>{
+  ttMx=e.clientX; ttMy=e.clientY;
+  if(pDown){ hideTT(); clearTimeout(hoverDelayTO); return; }
+  const[tx,ty]=s2t(e.clientX,e.clientY);
+  const gx=Math.floor(tx), gy=Math.floor(ty);
+  if(gx!==wHoverTx||gy!==wHoverTy){
+    wHoverTx=gx; wHoverTy=gy;
+    clearTimeout(hoverDelayTO); hideTT();
+    if(gx>=0&&gx<WORLD_W&&gy>=0&&gy<WORLD_H)
+      hoverDelayTO=setTimeout(()=>showTT(gx,gy),1000);
+  }
+});
+wCvs.addEventListener('mouseleave',()=>{
+  wHoverTx=-1; wHoverTy=-1; clearTimeout(hoverDelayTO); hideTT();
+});
 
 // ── Game Input ─────────────────────────────────────────────────────────────
 function gamePosPx(e) {
