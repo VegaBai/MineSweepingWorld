@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Endless Minesweeper</title>
+<title>Minesweeper World</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monospace;overflow:hidden;width:100vw;height:100vh;user-select:none}
@@ -18,6 +18,8 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #game-header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:#080e22;border-bottom:1px solid #1a2440;flex-shrink:0;min-height:50px}
 .btn{background:#111c38;color:#8ab;border:1px solid #1e3050;padding:6px 14px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:13px;transition:background .12s}
 .btn:hover{background:#1c2d54;color:#ace}
+.btn.danger{color:#f88;border-color:#4a2020}
+.btn.danger:hover{background:#2a1818;color:#faa}
 .sbox{background:#0a1220;border:1px solid #1a2838;border-radius:4px;padding:3px 10px;font-size:15px;font-weight:bold;letter-spacing:1px;min-width:58px;text-align:center}
 .slbl{font-size:10px;color:#445;margin-right:4px;letter-spacing:.5px}
 #game-canvas-wrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:10px}
@@ -31,6 +33,7 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 .lose #result-title{color:#e84a4a}
 #result-info{color:#556;font-size:14px;margin-bottom:24px;line-height:1.8}
 #result-info strong{color:#8ab}
+#result-btns{display:flex;gap:12px;justify-content:center}
 #toast{position:fixed;top:58px;left:50%;transform:translateX(-50%);background:rgba(120,40,40,.92);border:1px solid #a44;border-radius:6px;padding:7px 20px;font-size:13px;pointer-events:none;opacity:0;transition:opacity .3s;z-index:100;white-space:nowrap}
 </style>
 </head>
@@ -39,14 +42,14 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 <div id="world-screen">
   <canvas id="world-canvas"></canvas>
   <div id="world-hud">
-    <div id="hud-pos">Center: (0, 0)</div>
+    <div id="hud-pos">Center: (50, 50)</div>
     <div id="hud-zoom">Zoom: 1.00×</div>
     <div class="dim" id="hud-hint">Click any grid to start a game</div>
     <div class="dim">Drag to pan &nbsp;·&nbsp; Scroll to zoom</div>
     <div id="hud-legend" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 10px;max-width:220px"></div>
   </div>
   <div id="active-banner" onclick="resumeActive()">
-    ▶ Active game at (<span id="banner-coord">0,0</span>) — click to resume
+    ▶ Last game at (<span id="banner-coord">0,0</span>) — click to resume
   </div>
 </div>
 
@@ -55,10 +58,11 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
     <button class="btn" onclick="goWorld()">← World</button>
     <span id="hdr-grid" style="font-size:13px;color:#6a8aaa">Grid (0,0)</span>
     <span id="hdr-tier" style="font-size:12px;font-weight:bold;letter-spacing:.5px"></span>
-    <div><span class="slbl">MINES</span><span class="sbox" id="mine-disp">400</span></div>
+    <div><span class="slbl">MINES</span><span class="sbox" id="mine-disp">0</span></div>
     <div><span class="slbl">TIME</span><span class="sbox" id="time-disp">0:00</span></div>
     <span style="flex:1"></span>
     <span id="hdr-status" style="font-size:13px;color:#556"></span>
+    <button class="btn danger" id="restart-hdr-btn" onclick="restartCurrentGrid()" style="display:none">↺ Restart</button>
   </div>
   <div id="game-canvas-wrap">
     <canvas id="game-canvas"></canvas>
@@ -69,7 +73,10 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
   <div id="result-box">
     <div id="result-title">YOU WIN!</div>
     <div id="result-info"></div>
-    <button class="btn" style="font-size:14px;padding:10px 28px" onclick="dismissResult()">Return to World →</button>
+    <div id="result-btns">
+      <button class="btn danger" id="restart-overlay-btn" style="font-size:14px;padding:10px 28px" onclick="restartCurrentGrid()">↺ Restart</button>
+      <button class="btn" style="font-size:14px;padding:10px 28px" onclick="dismissResult()">← World Map</button>
+    </div>
   </div>
 </div>
 <div id="toast"></div>
@@ -78,7 +85,6 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 'use strict';
 
 // ── Difficulty Tiers ───────────────────────────────────────────────────────
-// Macaron pastel palette: fill is dark background tint, border/dot are the pastel accent
 const TIERS = [
   { id:'easy',   label:'EASY',   rows:10, cols:10, rate:0.12, weight:40,
     fill:'#2c2a24', border:'#d8c8a8', dot:'#ede0c4', text:'#c8b890' },
@@ -94,6 +100,9 @@ const TIERS = [
     fill:'#301414', border:'#e08080', dot:'#f5a8a8', text:'#d06060' },
 ];
 const TIER_WSUM = TIERS.reduce((s,t)=>s+t.weight, 0);
+
+// ── World Bounds ───────────────────────────────────────────────────────────
+const WORLD_W = 100, WORLD_H = 100;
 
 // Deterministic tier from grid coords (stable hash)
 function gridTier(gx, gy) {
@@ -112,10 +121,16 @@ const NCOL = ['','#5ab4f5','#5ef55e','#f56060','#6060f5','#f5a060','#60f5f5','#f
 
 // ── App State ──────────────────────────────────────────────────────────────
 let screen = 'world';
-let activeKey = null;
-let viewKey   = null;
+let lastActiveKey = null;   // most recently visited active game
+let viewKey = null;
 
-const cam = { x:0, y:0, zoom:1 };
+// Initial camera: centered on world, zoom to show full 100×100
+const cam = {
+  x: 49.5,
+  y: 49.5,
+  zoom: Math.min(window.innerWidth, window.innerHeight) * 0.88 / (WORLD_W * TILE2)
+};
+
 let pDown=false, pDragged=false, pStart={x:0,y:0}, pLast={x:0,y:0};
 
 const store = new Map();
@@ -245,9 +260,11 @@ function drawWorld() {
   const W=wCvs.width, H=wCvs.height, ctx=wCtx;
   ctx.fillStyle='#060610'; ctx.fillRect(0,0,W,H);
 
-  const [tlx,tly]=s2t(0,0), [brx,bry]=s2t(W,H), M=2;
-  const tx0=Math.floor(tlx)-M, tx1=Math.ceil(brx)+M;
-  const ty0=Math.floor(tly)-M, ty1=Math.ceil(bry)+M;
+  const [tlx,tly]=s2t(0,0), [brx,bry]=s2t(W,H);
+  const tx0=Math.max(0, Math.floor(tlx)-1);
+  const tx1=Math.min(WORLD_W-1, Math.ceil(brx));
+  const ty0=Math.max(0, Math.floor(tly)-1);
+  const ty1=Math.min(WORLD_H-1, Math.ceil(bry));
   const tw=TILE*cam.zoom, th=tw;
   const pulse=0.5+0.5*Math.sin(Date.now()/400);
 
@@ -267,9 +284,6 @@ function drawWorld() {
       fill='#0a200a'; stroke='#2a6a2a'; sw=1;
     } else if (st==='lost') {
       fill='#200a0a'; stroke='#6a2a2a'; sw=1;
-    } else if (activeKey) {
-      // Another game is active — dim idle tiles
-      fill=tier.fill; stroke='#1a1a28'; sw=1;
     }
 
     ctx.fillStyle=fill; ctx.fillRect(sx,sy,tw,th);
@@ -288,23 +302,27 @@ function drawWorld() {
         ctx.fillStyle=`rgba(${hexToRgb(tier.dot)},${0.55+0.45*pulse})`;
         ctx.fillText('ACTIVE',sx+tw/2,sy+th*0.45);
       } else {
-        // Show tier label
-        ctx.fillStyle=activeKey? '#2a2a3a': tier.text;
+        ctx.fillStyle=tier.text;
         ctx.fillText(tier.label,sx+tw/2,sy+th*0.42);
       }
 
       if (cam.zoom>=0.5) {
-        const cs2=Math.max(6,Math.floor(tw*0.13));
-        ctx.font=`${cs2}px Consolas,monospace`;
-        ctx.fillStyle = st==='idle'&&!activeKey ? tier.border : '#2a2a3e';
+        const fs2=Math.max(6,Math.floor(tw*0.13));
+        ctx.font=`${fs2}px Consolas,monospace`;
+        ctx.fillStyle = st==='idle' ? tier.border : '#2a2a3e';
         ctx.fillText(`${tier.cols}×${tier.rows}`,sx+tw/2,sy+th*0.65);
         if (cam.zoom>=0.7) {
           ctx.fillStyle='#25253a';
-          ctx.fillText(`${tx},${ty}`,sx+tw/2,sy+th-cs2-2);
+          ctx.fillText(`${tx},${ty}`,sx+tw/2,sy+th-fs2-2);
         }
       }
     }
   }
+
+  // World border
+  const [bsx,bsy]=t2s(0,0), [bex,bey]=t2s(WORLD_W,WORLD_H);
+  ctx.strokeStyle='#2a4070'; ctx.lineWidth=2;
+  ctx.strokeRect(bsx,bsy,bex-bsx,bey-bsy);
 }
 
 // parse "#rrggbb" → "r,g,b"
@@ -350,7 +368,6 @@ function drawGame() {
       ctx.fillRect(x,y+cs-1,cs,1); ctx.fillRect(x+cs-1,y,1,cs);
 
       if (flag) {
-        const px=cs/cs; // scale factor relative to 22px baseline
         ctx.fillStyle='#d84030';
         ctx.beginPath();
         const fx=x+Math.round(cs*0.25), fy=y+Math.round(cs*0.12);
@@ -398,6 +415,7 @@ function startTimer(g) {
   timerTick=setInterval(tickTimer,500); tickTimer();
 }
 function pauseTimer(g) {
+  if (!timerTick) return;
   clearInterval(timerTick); timerTick=null;
   if (g) g.elapsed=Math.floor((Date.now()-timerBase)/1000);
 }
@@ -412,27 +430,34 @@ function showFinalTime(g) {
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 function openGrid(gx, gy) {
+  if (gx<0||gx>=WORLD_W||gy<0||gy>=WORLD_H) return;
   const k=gKey(gx,gy);
+
+  // Pause timer of currently viewed game when switching
+  if (viewKey && viewKey!==k) {
+    const prev=store.get(viewKey);
+    if (prev&&prev.status==='active'&&!prev.firstClick) pauseTimer(prev);
+    else { clearInterval(timerTick); timerTick=null; }
+  }
+
   const g=ensureGrid(gx,gy);
 
-  if (g.status==='idle') {
-    if (activeKey!==null) { showToast('Finish your active game first!'); return; }
-    g.status='active'; activeKey=k;
-  }
+  if (g.status==='idle') g.status='active';
+  if (g.status==='active') lastActiveKey=k;
 
   viewKey=k; screen='game';
   document.getElementById('world-screen').style.display='none';
   document.getElementById('game-screen').style.display='flex';
+  document.getElementById('result-overlay').style.display='none';
 
   const t=g.tier;
-  document.getElementById('hdr-grid').textContent=
-    `Grid (${gx}, ${gy})`;
-  // Tier badge in header
+  document.getElementById('hdr-grid').textContent=`Grid (${gx}, ${gy})`;
   document.getElementById('hdr-tier').textContent=`${t.label}  ${t.cols}×${t.rows}`;
   document.getElementById('hdr-tier').style.color=t.border;
 
   initGameCvs(g);
   document.getElementById('mine-disp').textContent=g.mineCount-g.flagCount;
+  document.getElementById('restart-hdr-btn').style.display=g.status==='lost'?'':'none';
 
   if (g.status==='active') {
     if (g.firstClick) {
@@ -456,42 +481,70 @@ function goWorld() {
   screen='world';
   document.getElementById('world-screen').style.display='block';
   document.getElementById('game-screen').style.display='none';
+  document.getElementById('result-overlay').style.display='none';
   updateBanner();
 }
 
 function resumeActive() {
-  if (!activeKey) return;
-  const {gx,gy}=gCoord(activeKey); openGrid(gx,gy);
+  if (!lastActiveKey) return;
+  const g=store.get(lastActiveKey);
+  if (g&&g.status==='active') {
+    const {gx,gy}=gCoord(lastActiveKey); openGrid(gx,gy); return;
+  }
+  // lastActiveKey is no longer active; find another active game
+  for (const [k,gv] of store) {
+    if (gv.status==='active') {
+      lastActiveKey=k;
+      const {gx,gy}=gCoord(k); openGrid(gx,gy); return;
+    }
+  }
+  lastActiveKey=null; updateBanner();
 }
 
 function updateBanner() {
   const b=document.getElementById('active-banner');
-  if (activeKey&&screen==='world') {
-    const {gx,gy}=gCoord(activeKey);
-    const g=store.get(activeKey);
+  if (screen!=='world') { b.style.display='none'; return; }
+
+  let key=lastActiveKey;
+  if (key) {
+    const g=store.get(key);
+    if (!g||g.status!=='active') key=null;
+  }
+  if (!key) {
+    for (const [k,g] of store) {
+      if (g.status==='active') { key=k; lastActiveKey=k; break; }
+    }
+  }
+  if (key) {
+    const g=store.get(key);
+    const {gx,gy}=gCoord(key);
     document.getElementById('banner-coord').textContent=`${gx}, ${gy}`;
-    b.style.borderColor=g?g.tier.border:'#3a6ad8';
+    b.style.borderColor=g.tier.border;
     b.style.display='block';
-  } else { b.style.display='none'; }
+  } else {
+    b.style.display='none';
+  }
 }
 
 // ── Win / Lose ─────────────────────────────────────────────────────────────
 function handleLose(g, r, c) {
   g.hitIdx=r*g.cols+c; g.status='lost';
-  activeKey=null; pauseTimer(g);
+  pauseTimer(g);
   for (let i=0;i<g.total;i++) if (g.mines[i]) g.revealed[i]=1;
   drawGame();
   document.getElementById('hdr-status').textContent='✕ Game Over';
+  document.getElementById('restart-hdr-btn').style.display='';
   updateBanner();
   setTimeout(()=>showResult(false,g),600);
 }
 
 function handleWin(g) {
-  g.status='won'; activeKey=null; pauseTimer(g);
+  g.status='won'; pauseTimer(g);
   for (let i=0;i<g.total;i++) if (g.mines[i]&&!g.flagged[i]) { g.flagged[i]=1; g.flagCount++; }
   document.getElementById('mine-disp').textContent=0;
   drawGame();
   document.getElementById('hdr-status').textContent='✓ Completed!';
+  document.getElementById('restart-hdr-btn').style.display='none';
   updateBanner();
   setTimeout(()=>showResult(true,g),400);
 }
@@ -504,12 +557,24 @@ function showResult(won, g) {
   document.getElementById('result-info').innerHTML=won
     ?`<span style="color:${g.tier.border}">${g.tier.label}</span> Grid <strong>(${g.gx}, ${g.gy})</strong> cleared!<br>Time: <strong>${ts}</strong>`
     :`<span style="color:${g.tier.border}">${g.tier.label}</span> Grid <strong>(${g.gx}, ${g.gy})</strong><br>Time: <strong>${ts}</strong>`;
+  document.getElementById('restart-overlay-btn').style.display=won?'none':'';
   document.getElementById('result-overlay').style.display='flex';
 }
 
 function dismissResult() {
   document.getElementById('result-overlay').style.display='none';
   goWorld();
+}
+
+function restartCurrentGrid() {
+  if (!viewKey) return;
+  const g=store.get(viewKey); if (!g) return;
+  g.mines.fill(0); g.nums.fill(0); g.revealed.fill(0); g.flagged.fill(0);
+  g.status='active'; g.flagCount=0; g.revealedCount=0;
+  g.firstClick=true; g.hitIdx=-1; g.elapsed=0;
+  clearInterval(timerTick); timerTick=null;
+  const {gx,gy}=gCoord(viewKey);
+  openGrid(gx,gy);
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────────
@@ -536,12 +601,16 @@ wCvs.addEventListener('pointermove', e=>{
 });
 wCvs.addEventListener('pointerup', e=>{
   pDown=false; wCvs.classList.remove('dragging');
-  if (!pDragged) { const [tx,ty]=s2t(e.clientX,e.clientY); openGrid(Math.floor(tx),Math.floor(ty)); }
+  if (!pDragged) {
+    const [tx,ty]=s2t(e.clientX,e.clientY);
+    const gx=Math.floor(tx), gy=Math.floor(ty);
+    if (gx>=0&&gx<WORLD_W&&gy>=0&&gy<WORLD_H) openGrid(gx,gy);
+  }
 });
 wCvs.addEventListener('wheel', e=>{
   e.preventDefault();
   const [wx,wy]=s2t(e.clientX,e.clientY);
-  cam.zoom=Math.max(0.07,Math.min(4,cam.zoom*(e.deltaY<0?1.13:1/1.13)));
+  cam.zoom=Math.max(0.05,Math.min(4,cam.zoom*(e.deltaY<0?1.13:1/1.13)));
   const [nx,ny]=s2t(e.clientX,e.clientY);
   cam.x+=wx-nx; cam.y+=wy-ny;
   document.getElementById('hud-zoom').textContent=`Zoom: ${cam.zoom.toFixed(2)}×`;
@@ -618,8 +687,10 @@ function loop() {
     drawWorld();
     const [cx,cy]=s2t(wCvs.width/2,wCvs.height/2);
     document.getElementById('hud-pos').textContent=`Center: (${Math.floor(cx)}, ${Math.floor(cy)})`;
-    document.getElementById('hud-hint').textContent=
-      activeKey?'Complete active game to start another':'Click any grid to start a game';
+    const activeCount=[...store.values()].filter(g=>g.status==='active').length;
+    document.getElementById('hud-hint').textContent=activeCount>0
+      ?`${activeCount} game${activeCount>1?'s':''} in progress — click to switch`
+      :'Click any grid to start a game';
     updateBanner();
   }
   requestAnimationFrame(loop);
