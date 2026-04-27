@@ -9,18 +9,25 @@ export default async function handler(req, res) {
 
   const db = getPool();
   const r = await db.query(
-    'SELECT gx, gy, status, mines, revealed, flagged, updated_at FROM grid_states WHERE user_id=$1',
+    `SELECT grid_x, grid_y, status,
+            mines, revealed, flagged,
+            flag_count, revealed_count, first_click, hit_idx, elapsed_sec
+     FROM grid_states WHERE user_id=$1`,
     [user.sub]
   );
 
   const grids = r.rows.map(row => ({
-    gx: row.gx,
-    gy: row.gy,
-    status: row.status,
-    mines:    row.mines    ? Buffer.from(row.mines).toString('base64')    : null,
-    revealed: row.revealed ? Buffer.from(row.revealed).toString('base64') : null,
-    flagged:  row.flagged  ? Buffer.from(row.flagged).toString('base64')  : null,
-    updatedAt: row.updated_at,
+    gx: row.grid_x,
+    gy: row.grid_y,
+    status:        row.status,
+    mines:         row.mines    ? Buffer.from(row.mines).toString('base64')    : null,
+    revealed:      row.revealed ? Buffer.from(row.revealed).toString('base64') : null,
+    flagged:       row.flagged  ? Buffer.from(row.flagged).toString('base64')  : null,
+    flagCount:     row.flag_count,
+    revealedCount: row.revealed_count,
+    firstClick:    row.first_click,
+    hitIdx:        row.hit_idx,
+    elapsed:       row.elapsed_sec,
   }));
 
   res.json({ grids });

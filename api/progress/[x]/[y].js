@@ -17,24 +17,39 @@ export default async function handler(req, res) {
   const db = getPool();
 
   if (req.method === 'PUT') {
-    const { status, mines, revealed, flagged } = req.body ?? {};
-    const minesBuf    = mines    ? Buffer.from(mines,    'base64') : null;
-    const revealedBuf = revealed ? Buffer.from(revealed, 'base64') : null;
-    const flaggedBuf  = flagged  ? Buffer.from(flagged,  'base64') : null;
+    const {
+      status,
+      mines, revealed, flagged,
+      flagCount = 0, revealedCount = 0,
+      firstClick = true, hitIdx = -1, elapsed = 0,
+    } = req.body ?? {};
 
     await db.query(
-      `INSERT INTO grid_states (user_id, gx, gy, status, mines, revealed, flagged)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (user_id, gx, gy)
-       DO UPDATE SET status=$4, mines=$5, revealed=$6, flagged=$7, updated_at=NOW()`,
-      [user.sub, gx, gy, status, minesBuf, revealedBuf, flaggedBuf]
+      `INSERT INTO grid_states
+         (user_id, grid_x, grid_y, status, mines, revealed, flagged,
+          flag_count, revealed_count, first_click, hit_idx, elapsed_sec, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+       ON CONFLICT (user_id, grid_x, grid_y) DO UPDATE SET
+         status=$4, mines=$5, revealed=$6, flagged=$7,
+         flag_count=$8, revealed_count=$9, first_click=$10,
+         hit_idx=$11, elapsed_sec=$12, updated_at=NOW()`,
+      [
+        user.sub, gx, gy, status,
+        mines    ? Buffer.from(mines,    'base64') : null,
+        revealed ? Buffer.from(revealed, 'base64') : null,
+        flagged  ? Buffer.from(flagged,  'base64') : null,
+        flagCount, revealedCount, firstClick, hitIdx, elapsed,
+      ]
     );
 
     return res.status(204).end();
   }
 
   if (req.method === 'DELETE') {
-    await db.query('DELETE FROM grid_states WHERE user_id=$1 AND gx=$2 AND gy=$3', [user.sub, gx, gy]);
+    await db.query(
+      'DELETE FROM grid_states WHERE user_id=$1 AND grid_x=$2 AND grid_y=$3',
+      [user.sub, gx, gy]
+    );
     return res.status(204).end();
   }
 
