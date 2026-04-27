@@ -106,7 +106,7 @@ const TIERS = [
 const TIER_WSUM = TIERS.reduce((s,t)=>s+t.weight, 0);
 
 // ── World Bounds ───────────────────────────────────────────────────────────
-const WORLD_W = 50, WORLD_H = 50;
+const WORLD_W = 20, WORLD_H = 16;
 
 // Deterministic tier from grid coords (stable hash)
 function gridTier(gx, gy) {
@@ -631,7 +631,7 @@ wCvs.addEventListener('mousemove', e=>{
     wHoverTx=gx; wHoverTy=gy;
     clearTimeout(hoverDelayTO); hideTT();
     if(gx>=0&&gx<WORLD_W&&gy>=0&&gy<WORLD_H)
-      hoverDelayTO=setTimeout(()=>showTT(gx,gy),1000);
+      hoverDelayTO=setTimeout(()=>showTT(gx,gy),500);
   }
 });
 wCvs.addEventListener('mouseleave',()=>{
