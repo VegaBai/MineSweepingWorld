@@ -800,7 +800,7 @@ loop();
 // ═══════════════════════════════════════════════════════════════════════════
 // ── API & Auth Module ──────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
-const API_BASE = '';   // same origin; change to 'https://your-server' if hosted separately
+const API_BASE = '/api';
 
 // ── Token storage ──────────────────────────────────────────────────────────
 const Auth = {
@@ -993,44 +993,76 @@ window.openGrid = function(gx, gy) {
   wsClient.enterGrid(gx, gy);
 };
 
-// ── WebSocket client ───────────────────────────────────────────────────────
+// ── Real-time client (WS with polling fallback) ────────────────────────────
+// Tries WebSocket first; if the server doesn't expose /ws (e.g. Vercel),
+// falls back to polling /api/world/presence every 15 s.
 const wsClient = (() => {
-  let ws = null, reconnectTO = null, currentGrid = null;
+  let ws = null, reconnectTO = null, pollTO = null, currentGrid = null;
+  let usingPolling = false;
+
+  function updatePresenceUI(count) {
+    document.getElementById('hud-online').textContent =
+      `${count} player${count !== 1 ? 's' : ''} online`;
+  }
+
+  function startPolling() {
+    usingPolling = true;
+    async function poll() {
+      try {
+        const data = await apiFetch('/world/presence').catch(() => ({ count: 0 }));
+        updatePresenceUI(data.count ?? 0);
+      } catch {}
+      pollTO = setTimeout(poll, 15000);
+    }
+    poll();
+  }
 
   function connect() {
+    if (usingPolling) return;
     if (ws && ws.readyState <= 1) return;
+    clearTimeout(reconnectTO);
+
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${proto}://${location.host}/ws`);
+    try {
+      ws = new WebSocket(`${proto}://${location.host}/ws`);
+    } catch {
+      startPolling(); return;
+    }
+
+    // If WS fails to open within 3 s, assume server has no WS and switch to polling
+    const wsTimeout = setTimeout(() => {
+      if (!ws || ws.readyState !== 1) { ws?.close(); startPolling(); }
+    }, 3000);
 
     ws.onopen = () => {
-      clearTimeout(reconnectTO);
+      clearTimeout(wsTimeout);
       if (currentGrid) ws.send(JSON.stringify({ type: 'enter_grid', ...currentGrid }));
     };
 
     ws.onmessage = ({ data }) => {
       let msg; try { msg = JSON.parse(data); } catch { return; }
-      if (msg.type === 'presence') {
-        document.getElementById('hud-online').textContent =
-          `${msg.count} player${msg.count !== 1 ? 's' : ''} online`;
-      }
+      if (msg.type === 'presence') updatePresenceUI(msg.count);
       if (msg.type === 'grid_won') {
         addFeedItem(`${msg.username} cleared (${msg.gx},${msg.gy})!`);
         refreshLeaderboardIfOpen();
       }
     };
 
+    ws.onerror = () => { clearTimeout(wsTimeout); };
+
     ws.onclose = () => {
-      reconnectTO = setTimeout(connect, 5000);
+      clearTimeout(wsTimeout);
+      if (!usingPolling) reconnectTO = setTimeout(connect, 5000);
     };
   }
 
   function enterGrid(gx, gy) {
     currentGrid = { gx, gy };
-    if (ws?.readyState === 1) ws.send(JSON.stringify({ type: 'enter_grid', gx, gy }));
+    if (!usingPolling && ws?.readyState === 1) ws.send(JSON.stringify({ type: 'enter_grid', gx, gy }));
   }
   function leaveGrid() {
     currentGrid = null;
-    if (ws?.readyState === 1) ws.send(JSON.stringify({ type: 'leave_grid' }));
+    if (!usingPolling && ws?.readyState === 1) ws.send(JSON.stringify({ type: 'leave_grid' }));
   }
 
   return { connect, enterGrid, leaveGrid };
@@ -1056,7 +1088,7 @@ function closeLeaderboard() {
 }
 async function refreshLeaderboard() {
   try {
-    const rows = await apiFetch('/leaderboard');
+    const { leaderboard: rows } = await apiFetch('/leaderboard');
     const el = document.getElementById('lb-rows');
     el.innerHTML = rows.map((r, i) =>
       `<div class="lb-row">

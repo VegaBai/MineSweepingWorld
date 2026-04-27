@@ -1,0 +1,11 @@
+{
+  "name": "minesweeping-world",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "jose": "^5.2.4",
+    "pg": "^8.11.3"
+  }
+}
