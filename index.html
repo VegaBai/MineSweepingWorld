@@ -91,17 +91,23 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 // ── Difficulty Tiers ───────────────────────────────────────────────────────
 const TIERS = [
   { id:'easy',   label:'EASY',   rows:10, cols:10, rate:0.10, weight:40,
-    fill:'#2c2a24', border:'#d8c8a8', dot:'#ede0c4', text:'#c8b890' },
+    fill:'#2c2a24', border:'#d8c8a8', dot:'#ede0c4', text:'#c8b890',
+    idle:'#f5ede0', won:'#bc8a20', lost:'#aaa090' },
   { id:'normal', label:'NORMAL', rows:10, cols:20, rate:0.13, weight:25,
-    fill:'#1e2c22', border:'#88c8a0', dot:'#a8e0b8', text:'#78b888' },
+    fill:'#1e2c22', border:'#88c8a0', dot:'#a8e0b8', text:'#78b888',
+    idle:'#cef5dc', won:'#30a050', lost:'#809080' },
   { id:'medium', label:'MEDIUM', rows:20, cols:20, rate:0.15, weight:18,
-    fill:'#1a2030', border:'#88b4e0', dot:'#a8cef5', text:'#7aaad8' },
+    fill:'#1a2030', border:'#88b4e0', dot:'#a8cef5', text:'#7aaad8',
+    idle:'#cce4fc', won:'#3070cc', lost:'#7c90a4' },
   { id:'hard',   label:'HARD',   rows:20, cols:30, rate:0.16, weight:10,
-    fill:'#221830', border:'#b890e0', dot:'#d0aaf5', text:'#a880d0' },
+    fill:'#221830', border:'#b890e0', dot:'#d0aaf5', text:'#a880d0',
+    idle:'#e8d0fc', won:'#7038c4', lost:'#8c80a4' },
   { id:'expert', label:'EXPERT', rows:30, cols:30, rate:0.17, weight: 5,
-    fill:'#301e14', border:'#e0b070', dot:'#f5c888', text:'#d09050' },
+    fill:'#301e14', border:'#e0b070', dot:'#f5c888', text:'#d09050',
+    idle:'#fce0b8', won:'#c07828', lost:'#a49078' },
   { id:'master', label:'MASTER', rows:30, cols:45, rate:0.19, weight: 2,
-    fill:'#301414', border:'#e08080', dot:'#f5a8a8', text:'#d06060' },
+    fill:'#301414', border:'#e08080', dot:'#f5a8a8', text:'#d06060',
+    idle:'#fcc8c8', won:'#b83030', lost:'#9c7878' },
 ];
 const TIER_WSUM = TIERS.reduce((s,t)=>s+t.weight, 0);
 
@@ -288,9 +294,10 @@ function drawWorld() {
     const tier = g ? g.tier  : gridTier(tx,ty);
 
     let fill;
-    if      (st==='won')  fill='#2a7a3a';
-    else if (st==='lost') fill='#7a2a2a';
-    else                  fill=tier.dot;
+    if      (st==='won')    fill=tier.won;
+    else if (st==='lost')   fill=tier.lost;
+    else if (st==='active') fill=tier.dot;
+    else                    fill=tier.idle;
 
     ctx.fillStyle=fill; ctx.fillRect(sx,sy,tw,th);
 
