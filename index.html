@@ -38,6 +38,39 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #world-tooltip{position:fixed;display:none;background:rgba(8,14,34,.96);border:1px solid #2a4070;border-radius:6px;padding:8px 14px;font-size:12px;pointer-events:none;z-index:20;line-height:2;white-space:nowrap}
 #world-tooltip .tt-lbl{font-weight:bold}
 #world-tooltip .tt-sub{color:#778;font-size:11px}
+
+/* ── Auth Modal ── */
+#auth-overlay{position:fixed;inset:0;background:rgba(0,0,8,.82);display:none;align-items:center;justify-content:center;z-index:80;backdrop-filter:blur(6px)}
+#auth-box{background:#080e22;border:1.5px solid #1e3a6a;border-radius:12px;padding:32px 40px;min-width:300px;max-width:360px;width:90vw}
+#auth-box h2{font-size:20px;font-weight:bold;margin-bottom:20px;color:#aaccee;text-align:center;letter-spacing:.5px}
+.auth-field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.auth-field label{font-size:11px;color:#556;letter-spacing:.5px}
+.auth-field input{background:#0a1428;border:1px solid #1e3050;border-radius:4px;padding:8px 10px;color:#c8d8f0;font-family:inherit;font-size:14px;outline:none}
+.auth-field input:focus{border-color:#3a70c0}
+#auth-err{color:#f88;font-size:12px;min-height:18px;margin-bottom:10px;text-align:center}
+#auth-submit{width:100%;padding:10px;background:#1a3a7a;border:1px solid #2a5aaa;border-radius:4px;color:#aaccea;font-family:inherit;font-size:14px;cursor:pointer;transition:background .15s}
+#auth-submit:hover{background:#1e4a9a}
+#auth-toggle{text-align:center;margin-top:14px;font-size:12px;color:#445}
+#auth-toggle a{color:#6a9ada;cursor:pointer;text-decoration:underline}
+#auth-close{position:absolute;top:14px;right:18px;font-size:18px;cursor:pointer;color:#446;line-height:1}
+#auth-close:hover{color:#88a}
+
+/* ── Social HUD additions ── */
+#hud-online{font-size:11px;color:#4a6a8a}
+#hud-user{font-size:11px;color:#6a9ada;cursor:pointer}
+#hud-user:hover{color:#8ab}
+#leaderboard-panel{position:fixed;top:0;right:0;bottom:0;width:260px;background:rgba(6,10,26,.97);border-left:1px solid #1a2a4a;padding:16px 14px;transform:translateX(100%);transition:transform .25s;z-index:40;overflow-y:auto;display:flex;flex-direction:column;gap:0}
+#leaderboard-panel.open{transform:translateX(0)}
+#lb-title{font-size:13px;font-weight:bold;color:#8ab;letter-spacing:.5px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+#lb-close{cursor:pointer;color:#446;font-size:16px}#lb-close:hover{color:#88a}
+.lb-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #0e1a30;font-size:12px}
+.lb-rank{color:#334;width:20px;text-align:right;flex-shrink:0}
+.lb-name{flex:1;color:#aac}
+.lb-wins{color:#6aaa6a;font-weight:bold;min-width:30px;text-align:right}
+#feed{position:fixed;bottom:60px;right:16px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;pointer-events:none;z-index:30}
+.feed-item{background:rgba(20,50,30,.92);border:1px solid #2a6a3a;border-radius:6px;padding:5px 12px;font-size:12px;color:#8ae89a;animation:feedIn .3s ease,feedOut .4s 3.6s ease forwards}
+@keyframes feedIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+@keyframes feedOut{to{opacity:0;transform:translateX(20px)}}
 </style>
 </head>
 <body>
@@ -49,6 +82,8 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
     <div id="hud-zoom">Zoom: 1.00×</div>
     <div class="dim" id="hud-hint">Click any grid to start a game</div>
     <div class="dim">Drag to pan &nbsp;·&nbsp; Scroll to zoom</div>
+    <div id="hud-online" style="margin-top:4px"></div>
+    <div id="hud-user" style="margin-top:2px" onclick="showAuthOrProfile()"></div>
     <div id="hud-legend" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 10px;max-width:220px"></div>
   </div>
   <div id="world-tooltip"><div class="tt-lbl" id="tt-label"></div><div class="tt-sub" id="tt-size"></div></div>
@@ -84,6 +119,38 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
   </div>
 </div>
 <div id="toast"></div>
+
+<!-- ── Auth Modal ────────────────────────────────────────────────────── -->
+<div id="auth-overlay" style="position:fixed">
+  <div id="auth-box" style="position:relative">
+    <span id="auth-close" onclick="hideAuth()">✕</span>
+    <h2 id="auth-title">Login</h2>
+    <div class="auth-field">
+      <label>USERNAME</label>
+      <input id="auth-username" type="text" autocomplete="username" placeholder="your_name" maxlength="20">
+    </div>
+    <div class="auth-field" id="auth-email-wrap" style="display:none">
+      <label>EMAIL (optional)</label>
+      <input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com">
+    </div>
+    <div class="auth-field">
+      <label>PASSWORD</label>
+      <input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••">
+    </div>
+    <div id="auth-err"></div>
+    <button id="auth-submit" onclick="submitAuth()">Login</button>
+    <div id="auth-toggle">No account? <a onclick="toggleAuthMode()">Register</a></div>
+  </div>
+</div>
+
+<!-- ── Leaderboard Panel ─────────────────────────────────────────────── -->
+<div id="leaderboard-panel">
+  <div id="lb-title">🏆 Leaderboard <span id="lb-close" onclick="closeLeaderboard()">✕</span></div>
+  <div id="lb-rows"></div>
+</div>
+
+<!-- ── Feed (bottom-right win notifications) ────────────────────────── -->
+<div id="feed"></div>
 
 <script>
 'use strict';
@@ -729,6 +796,377 @@ window.addEventListener('resize', resizeWorld);
 resizeWorld();
 buildLegend();
 loop();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── API & Auth Module ──────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+const API_BASE = '';   // same origin; change to 'https://your-server' if hosted separately
+
+// ── Token storage ──────────────────────────────────────────────────────────
+const Auth = {
+  _access: null,
+  _refresh: localStorage.getItem('msw_refresh'),
+  username: localStorage.getItem('msw_username'),
+  userId:   localStorage.getItem('msw_userId'),
+
+  isLoggedIn() { return !!this._refresh; },
+
+  setTokens({ accessToken, refreshToken, username, userId }) {
+    this._access  = accessToken;
+    this._refresh = refreshToken;
+    this.username = username;
+    this.userId   = userId;
+    localStorage.setItem('msw_refresh',  refreshToken);
+    localStorage.setItem('msw_username', username);
+    localStorage.setItem('msw_userId',   userId);
+    updateAuthHUD();
+  },
+
+  clear() {
+    this._access = this._refresh = this.username = this.userId = null;
+    localStorage.removeItem('msw_refresh');
+    localStorage.removeItem('msw_username');
+    localStorage.removeItem('msw_userId');
+    updateAuthHUD();
+  },
+
+  async getAccess() {
+    if (this._access) {
+      // Check expiry (JWT payload middle segment)
+      try {
+        const { exp } = JSON.parse(atob(this._access.split('.')[1]));
+        if (Date.now() / 1000 < exp - 30) return this._access;
+      } catch {}
+    }
+    if (!this._refresh) return null;
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: this._refresh }),
+      });
+      if (!res.ok) { this.clear(); return null; }
+      const { accessToken } = await res.json();
+      this._access = accessToken;
+      return accessToken;
+    } catch { return null; }
+  },
+};
+
+// ── Generic authenticated fetch ────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
+  const token = await Auth.getAccess();
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers ?? {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  if (!res.ok) throw Object.assign(new Error(res.statusText), { status: res.status });
+  return res.json();
+}
+
+// ── Serialise/deserialise grid state ──────────────────────────────────────
+function gridToPayload(g) {
+  const toB64 = arr => arr ? btoa(String.fromCharCode(...arr)) : null;
+  return {
+    status:        g.status,
+    mines:         toB64(g.mines),
+    revealed:      toB64(g.revealed),
+    flagged:       toB64(g.flagged),
+    flagCount:     g.flagCount,
+    revealedCount: g.revealedCount,
+    firstClick:    g.firstClick,
+    hitIdx:        g.hitIdx,
+    elapsed:       g.elapsed,
+  };
+}
+
+function payloadToGrid(p, existingG) {
+  const fromB64 = (s, Ctor) => {
+    if (!s) return new Ctor(existingG.total);
+    const bin = atob(s);
+    const arr = new Ctor(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+  };
+  existingG.status        = p.status;
+  existingG.mines         = fromB64(p.mines,    Uint8Array);
+  existingG.revealed      = fromB64(p.revealed,  Uint8Array);
+  existingG.flagged       = fromB64(p.flagged,   Uint8Array);
+  existingG.flagCount     = p.flagCount     ?? 0;
+  existingG.revealedCount = p.revealedCount ?? 0;
+  existingG.firstClick    = p.firstClick    ?? true;
+  existingG.hitIdx        = p.hitIdx        ?? -1;
+  existingG.elapsed       = p.elapsed       ?? 0;
+  // Recompute nums from mines (needed for display)
+  if (!existingG.firstClick) _recomputeNums(existingG);
+}
+
+function _recomputeNums(g) {
+  const { rows, cols } = g;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const i = r * cols + c;
+    if (g.mines[i]) { g.nums[i] = -1; continue; }
+    let n = 0;
+    for (let dr=-1;dr<=1;dr++) for (let dc=-1;dc<=1;dc++) {
+      if (!dr&&!dc) continue;
+      const nr=r+dr,nc=c+dc;
+      if (nr>=0&&nr<rows&&nc>=0&&nc<cols&&g.mines[nr*cols+nc]) n++;
+    }
+    g.nums[i] = n;
+  }
+}
+
+// ── Progress sync ──────────────────────────────────────────────────────────
+async function syncLoadAll() {
+  if (!Auth.isLoggedIn()) return;
+  try {
+    const rows = await apiFetch('/progress');
+    for (const p of rows) {
+      const g = ensureGrid(p.gx, p.gy);
+      payloadToGrid(p, g);
+    }
+  } catch (e) {
+    console.warn('[sync] load failed:', e.message);
+  }
+}
+
+async function syncSave(gx, gy) {
+  if (!Auth.isLoggedIn()) return;
+  const g = store.get(gKey(gx, gy));
+  if (!g) return;
+  try {
+    await apiFetch(`/progress/${gx}/${gy}`, {
+      method: 'PUT',
+      body: JSON.stringify(gridToPayload(g)),
+    });
+  } catch (e) {
+    console.warn('[sync] save failed:', e.message);
+  }
+}
+
+async function syncDelete(gx, gy) {
+  if (!Auth.isLoggedIn()) return;
+  try {
+    await apiFetch(`/progress/${gx}/${gy}`, { method: 'DELETE' });
+  } catch (e) {
+    console.warn('[sync] delete failed:', e.message);
+  }
+}
+
+// ── Hook existing game events ──────────────────────────────────────────────
+// Patch goWorld to save current grid
+const _goWorld = goWorld;
+window.goWorld = function() {
+  if (viewKey) {
+    const { gx, gy } = gCoord(viewKey);
+    syncSave(gx, gy);
+  }
+  _goWorld();
+  wsClient.leaveGrid();
+};
+
+// Patch handleWin/handleLose (they're already in scope — wrap after definition)
+const _handleWin = handleWin;
+window.handleWin = function(g) {
+  _handleWin(g);
+  syncSave(g.gx, g.gy);
+};
+const _handleLose = handleLose;
+window.handleLose = function(g, r, c) {
+  _handleLose(g, r, c);
+  syncSave(g.gx, g.gy);
+};
+
+// Patch restartCurrentGrid to delete server state
+const _restartCurrentGrid = restartCurrentGrid;
+window.restartCurrentGrid = function() {
+  if (viewKey) {
+    const { gx, gy } = gCoord(viewKey);
+    syncDelete(gx, gy);
+  }
+  _restartCurrentGrid();
+};
+
+// Patch openGrid to notify WS of grid entry
+const _openGrid = openGrid;
+window.openGrid = function(gx, gy) {
+  _openGrid(gx, gy);
+  wsClient.enterGrid(gx, gy);
+};
+
+// ── WebSocket client ───────────────────────────────────────────────────────
+const wsClient = (() => {
+  let ws = null, reconnectTO = null, currentGrid = null;
+
+  function connect() {
+    if (ws && ws.readyState <= 1) return;
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+    ws.onopen = () => {
+      clearTimeout(reconnectTO);
+      if (currentGrid) ws.send(JSON.stringify({ type: 'enter_grid', ...currentGrid }));
+    };
+
+    ws.onmessage = ({ data }) => {
+      let msg; try { msg = JSON.parse(data); } catch { return; }
+      if (msg.type === 'presence') {
+        document.getElementById('hud-online').textContent =
+          `${msg.count} player${msg.count !== 1 ? 's' : ''} online`;
+      }
+      if (msg.type === 'grid_won') {
+        addFeedItem(`${msg.username} cleared (${msg.gx},${msg.gy})!`);
+        refreshLeaderboardIfOpen();
+      }
+    };
+
+    ws.onclose = () => {
+      reconnectTO = setTimeout(connect, 5000);
+    };
+  }
+
+  function enterGrid(gx, gy) {
+    currentGrid = { gx, gy };
+    if (ws?.readyState === 1) ws.send(JSON.stringify({ type: 'enter_grid', gx, gy }));
+  }
+  function leaveGrid() {
+    currentGrid = null;
+    if (ws?.readyState === 1) ws.send(JSON.stringify({ type: 'leave_grid' }));
+  }
+
+  return { connect, enterGrid, leaveGrid };
+})();
+
+// ── Feed notifications ─────────────────────────────────────────────────────
+function addFeedItem(text) {
+  const feed = document.getElementById('feed');
+  const el = document.createElement('div');
+  el.className = 'feed-item';
+  el.textContent = text;
+  feed.appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
+// ── Leaderboard panel ──────────────────────────────────────────────────────
+async function openLeaderboard() {
+  document.getElementById('leaderboard-panel').classList.add('open');
+  await refreshLeaderboard();
+}
+function closeLeaderboard() {
+  document.getElementById('leaderboard-panel').classList.remove('open');
+}
+async function refreshLeaderboard() {
+  try {
+    const rows = await apiFetch('/leaderboard');
+    const el = document.getElementById('lb-rows');
+    el.innerHTML = rows.map((r, i) =>
+      `<div class="lb-row">
+        <span class="lb-rank">${i+1}</span>
+        <span class="lb-name">${r.username}</span>
+        <span class="lb-wins">${r.won_count}</span>
+       </div>`
+    ).join('') || '<div style="color:#334;font-size:11px;padding:8px 0">No completions yet</div>';
+  } catch {}
+}
+function refreshLeaderboardIfOpen() {
+  if (document.getElementById('leaderboard-panel').classList.contains('open')) refreshLeaderboard();
+}
+
+// Expose leaderboard button (attach to HUD hint click or a button)
+document.getElementById('hud-hint').style.cursor = 'pointer';
+document.getElementById('hud-hint').title = 'Click to open leaderboard';
+document.getElementById('hud-hint').addEventListener('click', () => {
+  if (screen === 'world') openLeaderboard();
+});
+
+// ── Auth UI ────────────────────────────────────────────────────────────────
+let authMode = 'login'; // 'login' | 'register'
+
+function showAuthOrProfile() {
+  if (Auth.isLoggedIn()) {
+    if (confirm(`Logged in as ${Auth.username}\n\nLog out?`)) {
+      apiFetch('/auth/logout', { method: 'DELETE', body: JSON.stringify({ refreshToken: Auth._refresh }) })
+        .catch(() => {});
+      Auth.clear();
+    }
+  } else {
+    showAuth('login');
+  }
+}
+
+function showAuth(mode = 'login') {
+  authMode = mode;
+  document.getElementById('auth-title').textContent = mode === 'login' ? 'Login' : 'Register';
+  document.getElementById('auth-submit').textContent = mode === 'login' ? 'Login' : 'Register';
+  document.getElementById('auth-toggle').innerHTML =
+    mode === 'login'
+      ? 'No account? <a onclick="toggleAuthMode()">Register</a>'
+      : 'Have an account? <a onclick="toggleAuthMode()">Login</a>';
+  document.getElementById('auth-email-wrap').style.display = mode === 'register' ? '' : 'none';
+  document.getElementById('auth-err').textContent = '';
+  document.getElementById('auth-overlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('auth-username').focus(), 80);
+}
+
+function hideAuth() {
+  document.getElementById('auth-overlay').style.display = 'none';
+}
+
+function toggleAuthMode() {
+  showAuth(authMode === 'login' ? 'register' : 'login');
+}
+
+document.getElementById('auth-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitAuth();
+});
+
+async function submitAuth() {
+  const username = document.getElementById('auth-username').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const email    = document.getElementById('auth-email').value.trim() || undefined;
+  const errEl    = document.getElementById('auth-err');
+
+  if (!username || !password) { errEl.textContent = 'Please fill in all fields'; return; }
+  document.getElementById('auth-submit').disabled = true;
+
+  try {
+    const payload = { username, password, ...(authMode === 'register' && email ? { email } : {}) };
+    const data = await apiFetch(`/auth/${authMode}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    Auth.setTokens(data);
+    hideAuth();
+    await syncLoadAll();      // pull server progress into local store
+    wsClient.connect();
+  } catch (e) {
+    errEl.textContent = e.status === 409 ? 'Username already taken'
+      : e.status === 401 ? 'Invalid username or password'
+      : 'Server error, please try again';
+  } finally {
+    document.getElementById('auth-submit').disabled = false;
+  }
+}
+
+function updateAuthHUD() {
+  const el = document.getElementById('hud-user');
+  if (Auth.isLoggedIn()) {
+    el.textContent = `⬡ ${Auth.username}  (logout)`;
+    el.style.color = '#6a9ada';
+  } else {
+    el.textContent = '⬡ Login / Register';
+    el.style.color = '#446';
+  }
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+updateAuthHUD();
+if (Auth.isLoggedIn()) {
+  syncLoadAll();
+  wsClient.connect();
+} else {
+  // Connect WS anonymously for presence counter only
+  wsClient.connect();
+}
 </script>
 </body>
 </html>
