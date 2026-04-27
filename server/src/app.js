@@ -25,7 +25,7 @@ await app.register(cors, {
 });
 
 await app.register(jwt, {
-  secret: process.env.SUPABASE_JWT_SECRET,
+  secret: process.env.MSW_SUPABASE_JWT_SECRET,
   sign: { expiresIn: '15m' },
 });
 

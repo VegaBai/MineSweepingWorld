@@ -1,4 +1,13 @@
-import { getPool } from '../lib/db.js';
+import pg from 'pg';
+const { Pool } = pg;
+// DDL must run over a direct (non-pooled) connection — pgbouncer blocks CREATE TABLE etc.
+function getMigratePool() {
+  return new Pool({
+    connectionString: process.env.MSW_POSTGRES_URL_NON_POOLING,
+    ssl: { rejectUnauthorized: false },
+    max: 1,
+  });
+}
 
 const SQL = `
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -58,7 +67,7 @@ export default async function handler(req, res) {
   if (req.headers['x-migrate-secret'] !== process.env.MIGRATE_SECRET) {
     return res.status(403).json({ error: 'forbidden' });
   }
-  const db = getPool();
+  const db = getMigratePool();
   await db.query(SQL);
   res.json({ ok: true });
 }

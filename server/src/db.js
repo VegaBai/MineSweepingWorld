@@ -4,7 +4,7 @@ import 'dotenv/config';
 const { Pool } = pg;
 
 export const db = new Pool({
-  connectionString: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  connectionString: process.env.MSW_POSTGRES_URL,
   max: 10,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,

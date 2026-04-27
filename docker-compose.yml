@@ -9,9 +9,9 @@ services:
       - "3000:3000"
     environment:
       PORT: 3000
-      NEXT_PUBLIC_SUPABASE_URL: postgresql://msw:msw_pass@db:5432/minesweeper
+      MSW_POSTGRES_URL: postgresql://msw:msw_pass@db:5432/minesweeper
       REDIS_URL: redis://cache:6379
-      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-change_me_in_production}
+      MSW_SUPABASE_JWT_SECRET: ${MSW_SUPABASE_JWT_SECRET:-change_me_in_production}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
     depends_on:
       db:
