@@ -169,3 +169,196 @@
 | HARD | `#8020d8` | `#7038c4` | `#9080a8` | `#8c80a4` |
 | EXPERT | `#d07010` | `#c07828` | `#a89070` | `#a49078` |
 | MASTER | `#c81818` | `#b83030` | `#a07878` | `#9c7878` |
+
+---
+
+## v0.2 — Vercel 全栈部署
+
+---
+
+### v0.2.1 — 后端架构设计与初次实现
+
+将纯静态单页游戏改造为支持用户登录、进度持久化、多人轻交互的网页游戏。
+
+**技术选型：**
+- 后端：Node.js + Fastify 4（ESM），用于 Docker/VPS 部署
+- 数据库：PostgreSQL（Supabase 托管）
+- 认证：自签 JWT（15 min access token + 7 天 refresh token，SHA-256 哈希存库）
+- 实时：WebSocket hub（presence 计数 + grid_active 通知）
+- 静态资源：Fastify 直接 serve `index.html`
+
+**新增文件：**
+
+| 文件 | 说明 |
+|---|---|
+| `server/src/app.js` | Fastify 入口，注册插件、路由、migration |
+| `server/src/db.js` | pg Pool 单例 |
+| `server/src/redis.js` | ioredis（可选，降级不影响核心功能） |
+| `server/src/routes/auth.js` | `/auth/register` `/login` `/refresh` `/logout` |
+| `server/src/routes/progress.js` | `/progress` GET/PUT/DELETE，Uint8Array ↔ base64 ↔ BYTEA |
+| `server/src/routes/leaderboard.js` | `/leaderboard` top 20 |
+| `server/src/routes/world.js` | `/world/presence` 返回在线人数 |
+| `server/src/plugins/ws.js` | WebSocket hub：presence + grid_active 广播 |
+| `server/migrations/001_init.sql` | users / refresh_tokens / grid_states / leaderboard view |
+| `server/Dockerfile` | 多阶段构建，复制 `index.html` 到 `/srv/public/` |
+| `docker-compose.yml` | app + postgres:16-alpine + redis:7-alpine |
+
+**前端新增（index.html）：**
+- Auth 模块（localStorage token 管理，auto-refresh）
+- `apiFetch()` 封装（自动携带 Bearer token）
+- `syncLoadAll / syncSave / syncDelete`（本地 ↔ 服务端进度同步）
+- WebSocket 客户端（presence 计数 + grid_won feed 通知）
+- 登录/注册弹窗、排行榜面板
+
+---
+
+### v0.2.2 — 改造为 Vercel Serverless Functions
+
+Vercel 不支持持久 WebSocket，将 Fastify 服务重写为 Vercel Serverless Functions。
+
+**新增文件：**
+
+| 文件 | 说明 |
+|---|---|
+| `vercel.json` | 路由配置（`/api/*` → functions，其余 → `index.html`） |
+| `package.json`（根目录） | 声明 `bcryptjs` / `jose` / `pg` 依赖 |
+| `lib/db.js` | serverless 安全的 pg Pool 单例（warm 复用） |
+| `lib/auth.js` | `jose` JWT 签发/验证，`authenticate()` 中间件 |
+| `api/auth/register.js` | POST — 注册 |
+| `api/auth/login.js` | POST — 登录 |
+| `api/auth/refresh.js` | POST — 刷新 access token |
+| `api/auth/logout.js` | POST — 注销 |
+| `api/progress/index.js` | GET — 加载所有存档 |
+| `api/progress/[x]/[y].js` | PUT / DELETE — 保存或删除单格进度 |
+| `api/leaderboard/index.js` | GET — 排行榜 top 20 |
+| `api/world/presence.js` | GET — 活跃玩家数（DB 轮询替代 WebSocket） |
+| `api/migrate.js` | POST — 执行建表 SQL（受 `MIGRATE_SECRET` 保护） |
+| `api/config.js` | GET — 返回前端所需公开配置（Supabase URL / anon key） |
+
+**WebSocket 降级：**
+前端 `wsClient` 改为先尝试连接 `/ws`，3 秒内无响应则降级为每 15 秒轮询 `/api/world/presence`。
+
+**环境变量（Vercel 项目设置）：**
+
+| 变量名 | 说明 |
+|---|---|
+| `MSW_POSTGRES_URL` | Supabase pgbouncer 连接池 URL（API 函数用） |
+| `MSW_POSTGRES_URL_NON_POOLING` | Supabase 直连 URL（migration DDL 用） |
+| `MSW_SUPABASE_JWT_SECRET` | JWT 签名密钥 |
+| `MSW_SUPABASE_URL` | Supabase 项目 URL |
+| `NEXT_PUBLIC_MSW_SUPABASE_ANON_KEY` | Supabase anon key（前端初始化 Supabase 客户端用） |
+| `MIGRATE_SECRET` | 保护 `/api/migrate` 端点的自定义密钥 |
+
+---
+
+### v0.2.3 — 部署 Bug 修复记录
+
+#### Bug 1：页面 404
+
+**现象：** 部署后所有页面返回 404。
+
+**原因：** `vercel.json` 使用了 legacy `builds` + `routes` 格式。Vercel v2 看到 `builds` 字段后不再自动处理静态文件，`index.html` 从未被部署。
+
+**修复：** 删除 `builds` 和 `routes`，改用现代 `rewrites`：
+```json
+{ "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }] }
+```
+
+---
+
+#### Bug 2：Migration 报 SSL 证书错误
+
+**现象：** `POST /api/migrate` 返回 `FUNCTION_INVOCATION_FAILED`，日志显示 `Error: self-signed certificate in certificate chain`。
+
+**原因：** pg v8 将连接字符串中的 `sslmode=require` 升级为 `verify-full`（完整证书链校验），Supabase 使用自签名中间 CA，被 pg 拒绝。显式设置 `ssl: { rejectUnauthorized: false }` 不生效，因为连接字符串中的 `sslmode` 会覆盖它。
+
+**修复：** 建立连接前用 `URL` 解析去掉连接字符串中的 `sslmode` 参数，再传入显式 `ssl` 对象：
+```js
+function stripSslMode(url) {
+  const u = new URL(url);
+  u.searchParams.delete('sslmode');
+  return u.toString();
+}
+new Pool({ connectionString: stripSslMode(connStr), ssl: { rejectUnauthorized: false } });
+```
+
+---
+
+#### Bug 3：Migration SQL 文件找不到
+
+**现象：** `api/migrate.js` 用 `readFileSync` 读取 `../server/migrations/001_init.sql`，Vercel Lambda 运行时路径解析失败。
+
+**修复：** 将 SQL 直接内联到 `api/migrate.js` 中，消除文件路径依赖。
+
+---
+
+#### Bug 4：DB 列名不一致
+
+**现象：** 进度保存/加载接口报错。
+
+**原因：** SQL schema 使用 `grid_x` / `grid_y`，但 Vercel API 函数写的是 `gx` / `gy`。
+
+**修复：** 统一 `api/progress/index.js` 和 `api/progress/[x]/[y].js` 使用 `grid_x` / `grid_y`。
+
+---
+
+#### Bug 5：leaderboard 响应结构不匹配
+
+**现象：** 排行榜打开后空白。
+
+**原因：** API 返回 `{ leaderboard: [...] }`，前端直接把返回值当数组遍历。
+
+**修复：** 前端改为解构 `const { leaderboard: rows } = await apiFetch('/leaderboard')`。
+
+---
+
+#### Bug 6：Login/Register 按钮无法点击
+
+**现象：** 左上角 HUD 里的登录按钮无法点击，鼠标始终是 grab 状态。
+
+**原因：** `#world-hud` 设置了 `pointer-events: none`（防止遮挡 canvas 交互），内部所有子元素包括登录按钮均无法接收点击。
+
+**修复：** 将登录按钮移出 HUD，改为右上角独立固定定位的 `<button id="login-btn">`，自带 `pointer-events: auto`。
+
+---
+
+#### Bug 7：logout method 错误
+
+**现象：** 点击 logout 无效。
+
+**原因：** 前端调用 `apiFetch('/auth/logout', { method: 'DELETE' })`，但 `api/auth/logout.js` 只处理 `POST`。
+
+**修复：** 改为 `method: 'POST'`。
+
+---
+
+### v0.2.4 — Google OAuth 登录
+
+新增「Continue with Google」登录方式，使用 Supabase Auth 作为 OAuth 代理。
+
+**流程：**
+1. 前端调用 `supabase.auth.signInWithOAuth({ provider: 'google' })`
+2. 用户完成 Google 授权，Supabase 将 `access_token` 放在回调 URL 的 hash fragment 中（implicit flow）
+3. 前端解析 hash，将 Supabase access_token 发送至 `POST /api/auth/google`
+4. 后端调用 Supabase `/auth/v1/user` API 验证 token，获取 email
+5. 按 email 查找或创建用户记录（无密码），签发我们自己的 JWT
+6. 前端拿到 JWT，走正常登录流程
+
+**新增：**
+- `api/auth/google.js` — token 验证 + 用户查找/创建 + 签发 JWT
+- `api/config.js` — 返回前端初始化 Supabase 客户端所需的公开 key
+- 前端：Supabase JS CDN、Google 按钮 UI、`handleOAuthCallback()` 回调处理
+
+**Supabase Dashboard 配置（手动）：**
+- Authentication → Providers → Google → 填入 Google OAuth Client ID / Secret
+- Authentication → URL Configuration → 添加 Vercel 域名到 Redirect URLs
+
+**Google Cloud Console 配置（手动）：**
+- 已授权重定向 URI：`https://<project-ref>.supabase.co/auth/v1/callback`
+
+**关键 Bug 修复：**
+
+| 问题 | 原因 | 修复 |
+|---|---|---|
+| OAuth 回调后仍显示未登录 | `detectSessionInUrl: true`（默认）与手动 `exchangeCodeForSession` 竞争消费一次性 PKCE code，胜者不确定 | Supabase 客户端加 `{ auth: { detectSessionInUrl: false } }`，只保留手动调用路径 |
+| 修复后仍不生效 | Supabase 实际走的是 implicit flow，token 在 URL hash（`#access_token=...`）中，而非 query string `?code=`，回调函数检测条件永远不满足 | 改为优先解析 `window.location.hash`，直接取 `access_token` 使用，保留 `?code=` 作为 PKCE fallback |
