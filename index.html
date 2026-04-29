@@ -1207,12 +1207,17 @@ let _supabase = null;
 async function getSupabase() {
   if (_supabase) return _supabase;
   const { supabaseUrl, supabaseAnonKey } = await fetch('/api/config').then(r => r.json());
-  _supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+  // detectSessionInUrl:false prevents Supabase auto-exchanging the PKCE code,
+  // which would race with our manual exchangeCodeForSession call below.
+  _supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { detectSessionInUrl: false },
+  });
   return _supabase;
 }
 
 async function googleSignIn() {
   try {
+    document.getElementById('auth-err').textContent = '';
     const sb = await getSupabase();
     await sb.auth.signInWithOAuth({
       provider: 'google',
@@ -1224,14 +1229,15 @@ async function googleSignIn() {
 }
 
 async function handleOAuthCallback() {
-  // Supabase PKCE flow puts ?code= in the URL after redirect
   const params = new URLSearchParams(window.location.search);
   if (!params.has('code')) return;
+  // Clean the URL immediately so refreshing doesn't re-run the exchange
+  history.replaceState(null, '', window.location.pathname);
   try {
     const sb = await getSupabase();
     const { data: { session }, error } = await sb.auth.exchangeCodeForSession(params.get('code'));
-    if (error || !session) return;
-    history.replaceState(null, '', window.location.pathname);
+    if (error) { showToast('Google login failed: ' + error.message); return; }
+    if (!session) { showToast('Google login failed: no session returned'); return; }
     const data = await apiFetch('/auth/google', {
       method: 'POST',
       body: JSON.stringify({ supabaseToken: session.access_token }),
@@ -1240,7 +1246,7 @@ async function handleOAuthCallback() {
     await syncLoadAll();
     wsClient.connect();
   } catch (e) {
-    console.warn('[oauth] callback failed:', e.message);
+    showToast('Google login error: ' + e.message);
   }
 }
 
