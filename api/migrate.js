@@ -1,9 +1,16 @@
 import pg from 'pg';
 const { Pool } = pg;
+
+function stripSslMode(url) {
+  if (!url) return url;
+  try { const u = new URL(url); u.searchParams.delete('sslmode'); return u.toString(); }
+  catch { return url; }
+}
+
 // DDL must run over a direct (non-pooled) connection — pgbouncer blocks CREATE TABLE etc.
 function getMigratePool() {
   return new Pool({
-    connectionString: process.env.MSW_POSTGRES_URL_NON_POOLING,
+    connectionString: stripSslMode(process.env.MSW_POSTGRES_URL_NON_POOLING),
     ssl: { rejectUnauthorized: false },
     max: 1,
   });
