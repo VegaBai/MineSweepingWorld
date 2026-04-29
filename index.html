@@ -1229,29 +1229,35 @@ async function googleSignIn() {
 }
 
 async function handleOAuthCallback() {
-  const params = new URLSearchParams(window.location.search);
-  if (!params.has('code')) return;
-  // Clean the URL immediately so refreshing doesn't re-run the exchange
+  // Implicit flow: Supabase puts access_token in the URL hash fragment
+  // PKCE flow: Supabase puts code in the query string (fallback)
+  const hash   = new URLSearchParams(window.location.hash.slice(1));
+  const query  = new URLSearchParams(window.location.search);
+  const accessToken = hash.get('access_token');
+  const code        = query.get('code');
+  if (!accessToken && !code) return;
+
+  // Clean URL immediately — prevents re-running on refresh
   history.replaceState(null, '', window.location.pathname);
+
   try {
-    const sb = await getSupabase();
-    const { data: { session }, error } = await sb.auth.exchangeCodeForSession(params.get('code'));
-    if (error) {
-      console.error('[oauth] exchangeCodeForSession error:', error);
-      showToast('Google login failed: ' + error.message);
-      return;
+    let token = accessToken;
+
+    if (!token) {
+      // PKCE fallback: exchange the code for a session
+      const sb = await getSupabase();
+      const { data: { session }, error } = await sb.auth.exchangeCodeForSession(code);
+      if (error) { console.error('[oauth] code exchange error:', error); showToast('Google login failed: ' + error.message); return; }
+      if (!session) { console.error('[oauth] no session'); showToast('Google login failed: no session'); return; }
+      token = session.access_token;
     }
-    if (!session) {
-      console.error('[oauth] no session after exchange');
-      showToast('Google login failed: no session returned');
-      return;
-    }
-    console.log('[oauth] session obtained, exchanging for app token...');
+
+    console.log('[oauth] got token, calling /auth/google...');
     const data = await apiFetch('/auth/google', {
       method: 'POST',
-      body: JSON.stringify({ supabaseToken: session.access_token }),
+      body: JSON.stringify({ supabaseToken: token }),
     });
-    console.log('[oauth] app token received:', data.username);
+    console.log('[oauth] logged in as:', data.username);
     Auth.setTokens(data);
     await syncLoadAll();
     wsClient.connect();
