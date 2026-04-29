@@ -919,7 +919,7 @@ function _recomputeNums(g) {
 async function syncLoadAll() {
   if (!Auth.isLoggedIn()) return;
   try {
-    const rows = await apiFetch('/progress');
+    const { grids: rows } = await apiFetch('/progress');
     for (const p of rows) {
       const g = ensureGrid(p.gx, p.gy);
       payloadToGrid(p, g);
@@ -1116,7 +1116,7 @@ let authMode = 'login'; // 'login' | 'register'
 function showAuthOrProfile() {
   if (Auth.isLoggedIn()) {
     if (confirm(`Logged in as ${Auth.username}\n\nLog out?`)) {
-      apiFetch('/auth/logout', { method: 'DELETE', body: JSON.stringify({ refreshToken: Auth._refresh }) })
+      apiFetch('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken: Auth._refresh }) })
         .catch(() => {});
       Auth.clear();
     }
@@ -1186,7 +1186,7 @@ function updateAuthHUD() {
     el.style.color = '#6a9ada';
   } else {
     el.textContent = '⬡ Login / Register';
-    el.style.color = '#446';
+    el.style.color = '#7a9cc0';
   }
 }
 
