@@ -57,8 +57,8 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 
 /* ── Social HUD additions ── */
 #hud-online{font-size:11px;color:#4a6a8a}
-#hud-user{font-size:11px;color:#6a9ada;cursor:pointer}
-#hud-user:hover{color:#8ab}
+#login-btn{position:fixed;top:12px;right:12px;z-index:50;background:rgba(20,50,100,.9);border:1px solid #2a5aaa;border-radius:6px;padding:7px 16px;color:#aaccea;font-family:inherit;font-size:13px;cursor:pointer;pointer-events:auto;backdrop-filter:blur(4px);transition:background .15s,border-color .15s;white-space:nowrap}
+#login-btn:hover{background:rgba(30,70,150,.95);border-color:#4a8ada}
 #leaderboard-panel{position:fixed;top:0;right:0;bottom:0;width:260px;background:rgba(6,10,26,.97);border-left:1px solid #1a2a4a;padding:16px 14px;transform:translateX(100%);transition:transform .25s;z-index:40;overflow-y:auto;display:flex;flex-direction:column;gap:0}
 #leaderboard-panel.open{transform:translateX(0)}
 #lb-title{font-size:13px;font-weight:bold;color:#8ab;letter-spacing:.5px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
@@ -83,7 +83,6 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
     <div class="dim" id="hud-hint">Click any grid to start a game</div>
     <div class="dim">Drag to pan &nbsp;·&nbsp; Scroll to zoom</div>
     <div id="hud-online" style="margin-top:4px"></div>
-    <div id="hud-user" style="margin-top:2px" onclick="showAuthOrProfile()"></div>
     <div id="hud-legend" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 10px;max-width:220px"></div>
   </div>
   <div id="world-tooltip"><div class="tt-lbl" id="tt-label"></div><div class="tt-sub" id="tt-size"></div></div>
@@ -119,6 +118,9 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
   </div>
 </div>
 <div id="toast"></div>
+
+<!-- ── Login button (top-right, always on top) ──────────────────────── -->
+<button id="login-btn" onclick="showAuthOrProfile()">⬡ Login / Register</button>
 
 <!-- ── Auth Modal ────────────────────────────────────────────────────── -->
 <div id="auth-overlay" style="position:fixed">
@@ -1180,13 +1182,11 @@ async function submitAuth() {
 }
 
 function updateAuthHUD() {
-  const el = document.getElementById('hud-user');
+  const el = document.getElementById('login-btn');
   if (Auth.isLoggedIn()) {
     el.textContent = `⬡ ${Auth.username}  (logout)`;
-    el.style.color = '#6a9ada';
   } else {
     el.textContent = '⬡ Login / Register';
-    el.style.color = '#7a9cc0';
   }
 }
 
