@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — MineSweepingWorld</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monospace;min-height:100vh;padding:0}
+a{color:#6a9ada;text-decoration:none}
+a:hover{color:#aaccea}
+
+/* ── Header ── */
+#header{background:#080e22;border-bottom:1px solid #1a2a4a;padding:12px 28px;display:flex;align-items:center;gap:18px}
+#header h1{font-size:16px;font-weight:bold;color:#aaccee;letter-spacing:.5px;flex:1}
+#header .back{font-size:13px;color:#556;cursor:pointer;border:1px solid #1a2a4a;padding:5px 14px;border-radius:4px;background:#0a1220;transition:background .15s}
+#header .back:hover{background:#111c38;color:#8ab}
+#hdr-user{font-size:12px;color:#4a6a8a}
+
+/* ── Layout ── */
+#main{max-width:1100px;margin:0 auto;padding:28px 24px}
+
+/* ── Stats ── */
+#stats{display:flex;gap:14px;margin-bottom:28px;flex-wrap:wrap}
+.stat-card{background:#080e22;border:1px solid #1a2a4a;border-radius:8px;padding:16px 24px;min-width:140px;flex:1}
+.stat-card .label{font-size:10px;color:#446;letter-spacing:.6px;margin-bottom:6px}
+.stat-card .value{font-size:28px;font-weight:bold}
+.stat-card.total .value{color:#aaccee}
+.stat-card.user .value{color:#6a8aaa}
+.stat-card.subscriber .value{color:#6aaa6a}
+.stat-card.premium .value{color:#c09030}
+.stat-card.admin .value{color:#aa6ac0}
+
+/* ── Search ── */
+#toolbar{display:flex;gap:12px;margin-bottom:16px;align-items:center}
+#search{background:#0a1220;border:1px solid #1a2a4a;border-radius:4px;padding:7px 12px;color:#c8d8f0;font-family:inherit;font-size:13px;outline:none;width:260px}
+#search:focus{border-color:#2a5aaa}
+#role-filter{background:#0a1220;border:1px solid #1a2a4a;border-radius:4px;padding:7px 10px;color:#c8d8f0;font-family:inherit;font-size:13px;outline:none;cursor:pointer}
+#user-count{font-size:12px;color:#446;margin-left:auto}
+
+/* ── Table ── */
+#table-wrap{background:#080e22;border:1px solid #1a2a4a;border-radius:8px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{background:#0a1428;padding:10px 14px;text-align:left;font-size:10px;color:#446;letter-spacing:.6px;font-weight:normal;border-bottom:1px solid #1a2a4a}
+tbody tr{border-bottom:1px solid #0e1a30;transition:background .1s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:#0a1220}
+td{padding:10px 14px;vertical-align:middle}
+td.username{color:#aaccee;font-weight:bold}
+td.email{color:#556;font-size:12px}
+td.date{color:#334;font-size:11px}
+.role-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:bold;letter-spacing:.3px}
+.role-badge.user{background:#1a2a3a;color:#6a8aaa}
+.role-badge.subscriber{background:#1a2e1a;color:#6aaa6a}
+.role-badge.premium{background:#2e2010;color:#c09030}
+.role-badge.admin{background:#2a1a3a;color:#aa6ac0}
+
+/* ── Role selector ── */
+.role-select{background:#0a1220;border:1px solid #1a2a4a;border-radius:4px;padding:4px 8px;color:#c8d8f0;font-family:inherit;font-size:12px;cursor:pointer;outline:none}
+.role-select:focus{border-color:#2a5aaa}
+.save-btn{background:#111c38;color:#8ab;border:1px solid #1e3050;padding:4px 12px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:12px;margin-left:6px;transition:background .12s}
+.save-btn:hover{background:#1c2d54}
+.save-btn:disabled{opacity:.4;cursor:default}
+.save-btn.saved{color:#6aaa6a;border-color:#2a5a2a}
+
+/* ── Access denied ── */
+#denied{display:none;text-align:center;padding:80px 20px}
+#denied h2{font-size:24px;color:#f88;margin-bottom:12px}
+#denied p{color:#556;font-size:14px}
+
+/* ── Loading ── */
+#loading{text-align:center;padding:60px;color:#334;font-size:14px}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <button class="back" onclick="location.href='/'">← Back to Game</button>
+  <h1>Admin Management</h1>
+  <span id="hdr-user"></span>
+</div>
+
+<div id="denied">
+  <h2>Access Denied</h2>
+  <p>This page is restricted to administrators.</p>
+  <p style="margin-top:16px"><a href="/">← Return to game</a></p>
+</div>
+
+<div id="main" style="display:none">
+  <div id="stats">
+    <div class="stat-card total"><div class="label">TOTAL USERS</div><div class="value" id="cnt-total">—</div></div>
+    <div class="stat-card user"><div class="label">USER</div><div class="value" id="cnt-user">—</div></div>
+    <div class="stat-card subscriber"><div class="label">SUBSCRIBER</div><div class="value" id="cnt-subscriber">—</div></div>
+    <div class="stat-card premium"><div class="label">PREMIUM</div><div class="value" id="cnt-premium">—</div></div>
+    <div class="stat-card admin"><div class="label">ADMIN</div><div class="value" id="cnt-admin">—</div></div>
+  </div>
+
+  <div id="toolbar">
+    <input id="search" type="text" placeholder="Search username or email…" oninput="renderTable()">
+    <select id="role-filter" onchange="renderTable()">
+      <option value="">All roles</option>
+      <option value="user">User</option>
+      <option value="subscriber">Subscriber</option>
+      <option value="premium">Premium</option>
+      <option value="admin">Admin</option>
+    </select>
+    <span id="user-count"></span>
+  </div>
+
+  <div id="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>USERNAME</th>
+          <th>EMAIL</th>
+          <th>CURRENT ROLE</th>
+          <th>JOINED</th>
+          <th>LAST SEEN</th>
+          <th>CHANGE ROLE</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="loading">Loading users…</div>
+  </div>
+</div>
+
+<script>
+const API_BASE = '/api';
+let allUsers = [];
+let myUserId = null;
+
+// ── Auth (mirrors index.html Auth module) ──────────────────────────────────
+const Auth = {
+  get token()    { return localStorage.getItem('msw_access'); },
+  get refresh()  { return localStorage.getItem('msw_refresh'); },
+  get username() { return localStorage.getItem('msw_username'); },
+  get userId()   { return localStorage.getItem('msw_userId'); },
+  get role()     { return localStorage.getItem('msw_role'); },
+};
+
+async function getAccessToken() {
+  // Try stored access token first (just use it; let 401 trigger refresh)
+  if (Auth.token) return Auth.token;
+  if (!Auth.refresh) return null;
+  const r = await fetch(`${API_BASE}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: Auth.refresh }),
+  });
+  if (!r.ok) return null;
+  const { accessToken } = await r.json();
+  localStorage.setItem('msw_access', accessToken);
+  return accessToken;
+}
+
+async function apiFetch(path, opts = {}) {
+  const token = await getAccessToken();
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers ?? {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  if (!res.ok) {
+    const err = Object.assign(new Error(res.statusText), { status: res.status });
+    throw err;
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+// ── Date formatting ────────────────────────────────────────────────────────
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-CA') + ' ' + d.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' });
+}
+
+// ── Table rendering ────────────────────────────────────────────────────────
+function renderTable() {
+  const q    = document.getElementById('search').value.toLowerCase();
+  const role = document.getElementById('role-filter').value;
+  const filtered = allUsers.filter(u =>
+    (!q    || u.username.toLowerCase().includes(q) || (u.email ?? '').toLowerCase().includes(q)) &&
+    (!role || u.role === role)
+  );
+
+  document.getElementById('user-count').textContent = `${filtered.length} / ${allUsers.length} users`;
+
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = filtered.map(u => `
+    <tr data-id="${u.id}">
+      <td class="username">${u.username}</td>
+      <td class="email">${u.email ?? '<span style="color:#223">—</span>'}</td>
+      <td><span class="role-badge ${u.role}">${u.role}</span></td>
+      <td class="date">${fmtDate(u.created_at)}</td>
+      <td class="date">${fmtDate(u.last_seen)}</td>
+      <td>
+        <select class="role-select" data-uid="${u.id}" onchange="onRoleChange(this)">
+          <option value="user"       ${u.role==='user'       ?'selected':''}>user</option>
+          <option value="subscriber" ${u.role==='subscriber' ?'selected':''}>subscriber</option>
+          <option value="premium"    ${u.role==='premium'    ?'selected':''}>premium</option>
+          <option value="admin"      ${u.role==='admin'      ?'selected':''}>admin</option>
+        </select>
+        <button class="save-btn" data-uid="${u.id}" onclick="saveRole(this)" disabled>Save</button>
+      </td>
+    </tr>
+  `).join('');
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#334;padding:24px">No users found</td></tr>';
+  }
+}
+
+function onRoleChange(select) {
+  const uid = select.dataset.uid;
+  const btn = document.querySelector(`.save-btn[data-uid="${uid}"]`);
+  const original = allUsers.find(u => String(u.id) === String(uid))?.role;
+  btn.disabled = select.value === original;
+  btn.textContent = 'Save';
+  btn.className = 'save-btn';
+}
+
+async function saveRole(btn) {
+  const uid    = btn.dataset.uid;
+  const select = document.querySelector(`.role-select[data-uid="${uid}"]`);
+  const role   = select.value;
+
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    await apiFetch('/admin/users', {
+      method: 'PATCH',
+      body: JSON.stringify({ userId: uid, role }),
+    });
+    // Update local data
+    const u = allUsers.find(u => String(u.id) === String(uid));
+    if (u) u.role = role;
+    btn.textContent = '✓ Saved';
+    btn.className = 'save-btn saved';
+    // Refresh stats
+    loadStats();
+    // Re-render the badge in-place
+    const badge = btn.closest('tr').querySelector('.role-badge');
+    badge.className = `role-badge ${role}`;
+    badge.textContent = role;
+  } catch (e) {
+    btn.textContent = '✗ Error';
+    btn.disabled = false;
+  }
+}
+
+function loadStats() {
+  const counts = { user: 0, subscriber: 0, premium: 0, admin: 0 };
+  allUsers.forEach(u => { if (counts[u.role] !== undefined) counts[u.role]++; });
+  document.getElementById('cnt-total').textContent      = allUsers.length;
+  document.getElementById('cnt-user').textContent       = counts.user;
+  document.getElementById('cnt-subscriber').textContent = counts.subscriber;
+  document.getElementById('cnt-premium').textContent    = counts.premium;
+  document.getElementById('cnt-admin').textContent      = counts.admin;
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+(async () => {
+  // Show user in header
+  if (Auth.username) {
+    document.getElementById('hdr-user').textContent = `⬡ ${Auth.username}`;
+  }
+  myUserId = Auth.userId;
+
+  try {
+    const data = await apiFetch('/admin/users');
+    allUsers = data.users;
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('main').style.display    = '';
+    loadStats();
+    renderTable();
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) {
+      document.getElementById('denied').style.display = '';
+    } else {
+      document.getElementById('loading').textContent = 'Failed to load: ' + e.message;
+    }
+  }
+})();
+</script>
+</body>
+</html>

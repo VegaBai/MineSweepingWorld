@@ -9,7 +9,7 @@ export default async function handler(req, res) {
 
   const db = getPool();
   const r = await db.query(
-    `SELECT rt.user_id, u.username
+    `SELECT rt.user_id, u.username, u.role
      FROM refresh_tokens rt
      JOIN users u ON u.id = rt.user_id
      WHERE rt.token_hash=$1 AND rt.expires_at > NOW()`,
@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   );
   if (!r.rows.length) return res.status(401).json({ error: 'invalid or expired refresh token' });
 
-  const { user_id, username } = r.rows[0];
-  const accessToken = await signAccess({ sub: String(user_id), username });
+  const { user_id, username, role } = r.rows[0];
+  const accessToken = await signAccess({ sub: String(user_id), username, role });
   res.json({ accessToken });
 }

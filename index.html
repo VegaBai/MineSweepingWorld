@@ -126,7 +126,8 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 </div>
 <div id="toast"></div>
 
-<!-- ── Login button (top-right, always on top) ──────────────────────── -->
+<!-- ── Top-right controls ────────────────────────────────────────────── -->
+<a id="admin-link" href="/admin_management" style="display:none;position:fixed;top:12px;right:210px;z-index:50;background:rgba(40,20,60,.9);border:1px solid #6a3aaa;border-radius:6px;padding:7px 14px;color:#c090e0;font-family:'Consolas','Courier New',monospace;font-size:13px;pointer-events:auto;backdrop-filter:blur(4px);white-space:nowrap">⬡ Admin</a>
 <button id="login-btn" onclick="showAuthOrProfile()">⬡ Login / Register</button>
 
 <!-- ── Auth Modal ────────────────────────────────────────────────────── -->
@@ -822,25 +823,31 @@ const Auth = {
   _refresh: localStorage.getItem('msw_refresh'),
   username: localStorage.getItem('msw_username'),
   userId:   localStorage.getItem('msw_userId'),
+  role:     localStorage.getItem('msw_role') ?? 'user',
 
   isLoggedIn() { return !!this._refresh; },
+  isAdmin()    { return this.role === 'admin'; },
 
-  setTokens({ accessToken, refreshToken, username, userId }) {
+  setTokens({ accessToken, refreshToken, username, userId, role = 'user' }) {
     this._access  = accessToken;
     this._refresh = refreshToken;
     this.username = username;
     this.userId   = userId;
+    this.role     = role;
     localStorage.setItem('msw_refresh',  refreshToken);
     localStorage.setItem('msw_username', username);
     localStorage.setItem('msw_userId',   userId);
+    localStorage.setItem('msw_role',     role);
     updateAuthHUD();
   },
 
   clear() {
     this._access = this._refresh = this.username = this.userId = null;
+    this.role = 'user';
     localStorage.removeItem('msw_refresh');
     localStorage.removeItem('msw_username');
     localStorage.removeItem('msw_userId');
+    localStorage.removeItem('msw_role');
     updateAuthHUD();
   },
 
@@ -1200,6 +1207,8 @@ function updateAuthHUD() {
   } else {
     el.textContent = '⬡ Login / Register';
   }
+  const adminLink = document.getElementById('admin-link');
+  if (adminLink) adminLink.style.display = Auth.isAdmin() ? '' : 'none';
 }
 
 // ── Google OAuth ───────────────────────────────────────────────────────────

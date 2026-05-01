@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { getPool } from '../../lib/db.js';
 import { signAccess, hashToken } from '../../lib/auth.js';
 
+const ADMIN_EMAILS = ['vegabaixuan@gmail.com'];
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -31,22 +33,23 @@ export default async function handler(req, res) {
 
   // Find existing user by email, or create a new one
   let user;
+  const role = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'admin' : 'user';
+
   const existing = await db.query(
-    'SELECT id, username FROM users WHERE email=$1', [email]
+    'SELECT id, username, role FROM users WHERE email=$1', [email]
   );
 
   if (existing.rows.length) {
     user = existing.rows[0];
   } else {
-    // Ensure username uniqueness
     let username = baseUsername;
     const taken = await db.query('SELECT 1 FROM users WHERE username=$1', [username]);
     if (taken.rows.length) {
       username = username.slice(0, 15) + '_' + crypto.randomBytes(2).toString('hex');
     }
     const r = await db.query(
-      'INSERT INTO users (username, email) VALUES ($1,$2) RETURNING id, username',
-      [username, email]
+      'INSERT INTO users (username, email, role) VALUES ($1,$2,$3) RETURNING id, username, role',
+      [username, email, role]
     );
     user = r.rows[0];
   }
@@ -58,6 +61,6 @@ export default async function handler(req, res) {
     [user.id, hashToken(raw), expires]
   );
 
-  const accessToken = await signAccess({ sub: String(user.id), username: user.username });
-  res.json({ accessToken, refreshToken: raw, username: user.username, userId: user.id });
+  const accessToken = await signAccess({ sub: String(user.id), username: user.username, role: user.role });
+  res.json({ accessToken, refreshToken: raw, username: user.username, userId: user.id, role: user.role });
 }

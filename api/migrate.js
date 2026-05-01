@@ -66,6 +66,13 @@ FROM users u
 LEFT JOIN grid_states gs ON gs.user_id = u.id
 GROUP BY u.id, u.username
 ORDER BY won_count DESC;
+
+-- Migration 002: user roles
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check
+  CHECK (role IN ('user', 'subscriber', 'premium', 'admin'));
+UPDATE users SET role = 'admin' WHERE email = 'vegabaixuan@gmail.com';
 `;
 
 // One-time migration — protect with a secret header

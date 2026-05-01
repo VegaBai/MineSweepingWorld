@@ -3,6 +3,8 @@ import crypto from 'crypto';
 import { getPool } from '../../lib/db.js';
 import { signAccess, hashToken } from '../../lib/auth.js';
 
+const ADMIN_EMAILS = ['vegabaixuan@gmail.com'];
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -13,14 +15,16 @@ export default async function handler(req, res) {
   }
   if (password.length < 6) return res.status(400).json({ error: 'password too short' });
 
+  const { email } = req.body;
   const db = getPool();
   const hash = await bcrypt.hash(password, 10);
+  const role = ADMIN_EMAILS.includes(email?.toLowerCase()) ? 'admin' : 'user';
 
   let user;
   try {
     const r = await db.query(
-      'INSERT INTO users (username, password_hash) VALUES ($1,$2) RETURNING id, username',
-      [username, hash]
+      'INSERT INTO users (username, email, password_hash, role) VALUES ($1,$2,$3,$4) RETURNING id, username, role',
+      [username, email ?? null, hash, role]
     );
     user = r.rows[0];
   } catch (e) {
@@ -35,6 +39,6 @@ export default async function handler(req, res) {
     [user.id, hashToken(raw), expires]
   );
 
-  const accessToken = await signAccess({ sub: String(user.id), username: user.username });
-  res.status(201).json({ accessToken, refreshToken: raw, username: user.username, userId: user.id });
+  const accessToken = await signAccess({ sub: String(user.id), username: user.username, role: user.role });
+  res.status(201).json({ accessToken, refreshToken: raw, username: user.username, userId: user.id, role: user.role });
 }
