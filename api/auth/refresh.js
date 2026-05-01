@@ -19,5 +19,5 @@ export default async function handler(req, res) {
 
   const { user_id, username, role } = r.rows[0];
   const accessToken = await signAccess({ sub: String(user_id), username, role });
-  res.json({ accessToken });
+  res.json({ accessToken, role });
 }

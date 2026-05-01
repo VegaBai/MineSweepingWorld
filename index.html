@@ -867,8 +867,13 @@ const Auth = {
         body: JSON.stringify({ refreshToken: this._refresh }),
       });
       if (!res.ok) { this.clear(); return null; }
-      const { accessToken } = await res.json();
+      const { accessToken, role } = await res.json();
       this._access = accessToken;
+      if (role && role !== this.role) {
+        this.role = role;
+        localStorage.setItem('msw_role', role);
+        updateAuthHUD();
+      }
       return accessToken;
     } catch { return null; }
   },
