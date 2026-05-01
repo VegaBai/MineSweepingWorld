@@ -362,3 +362,104 @@ new Pool({ connectionString: stripSslMode(connStr), ssl: { rejectUnauthorized: f
 |---|---|---|
 | OAuth 回调后仍显示未登录 | `detectSessionInUrl: true`（默认）与手动 `exchangeCodeForSession` 竞争消费一次性 PKCE code，胜者不确定 | Supabase 客户端加 `{ auth: { detectSessionInUrl: false } }`，只保留手动调用路径 |
 | 修复后仍不生效 | Supabase 实际走的是 implicit flow，token 在 URL hash（`#access_token=...`）中，而非 query string `?code=`，回调函数检测条件永远不满足 | 改为优先解析 `window.location.hash`，直接取 `access_token` 使用，保留 `?code=` 作为 PKCE fallback |
+
+---
+
+## v0.3 — 权限系统 + 多环境部署（2026-05-01）
+
+---
+
+### v0.3.1 — 用户角色系统
+
+新增四个用户组，并添加管理后台页面。
+
+**用户组定义：**
+
+| 角色 | 说明 |
+|---|---|
+| `user` | 默认角色，所有新注册用户 |
+| `subscriber` | 订阅用户 |
+| `premium` | 高级用户 |
+| `admin` | 管理员，白名单：`vegabaixuan@gmail.com` |
+
+**数据库变更（Migration 002）：**
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+ALTER TABLE users ADD CONSTRAINT users_role_check
+  CHECK (role IN ('user', 'subscriber', 'premium', 'admin'));
+UPDATE users SET role = 'admin' WHERE email = 'vegabaixuan@gmail.com';
+```
+
+**后端变更：**
+- 所有 auth 路由（register / login / refresh / google）查询 `role` 并写入 JWT payload
+- `api/auth/refresh.js` 响应新增 `role` 字段（之前只返回 `accessToken`）
+- `api/admin/users.js` 新增：GET 全部用户列表 + PATCH 修改角色（admin only，403 保护）
+- Google OAuth 注册时按 email 白名单自动分配 `admin` 角色
+
+**前端变更（index.html）：**
+- `Auth` 对象新增 `role` 字段（读写 `localStorage.msw_role`）
+- `Auth.isAdmin()` 方法
+- `setTokens()` 存储 role；token 自动刷新时若 role 有变化同步更新 localStorage
+- 右上角新增紫色 `⬡ Admin` 入口链接，仅 admin 可见
+
+**新增文件：**
+- `api/admin/users.js` — 用户管理 API
+- `admin_management.html` — 管理后台页面（独立页面，暗色主题，含用户表格、角色下拉修改、统计卡片、搜索/筛选）
+
+**路由：**
+- `vercel.json` 新增 `/admin_management` → `admin_management.html` rewrite
+
+---
+
+### v0.3.2 — Admin 入口不可见 Bug 修复
+
+**现象：** vegabaixuan@gmail.com 注册后未看到 Admin 入口。
+
+**排查与修复：**
+
+| 问题 | 原因 | 修复 |
+|---|---|---|
+| Admin 入口不显示 | migration 002 未运行，`role` 列不存在；或用户在角色系统上线前已登录，localStorage `msw_role` 缓存了旧值 `null` | 重跑 migration → 退出重新登录 |
+| 重新登录后仍丢失 role | `api/auth/refresh.js` 原本只返回 `accessToken`，不含 `role`；前端 token 自动刷新后不更新 `msw_role` | refresh 接口响应加 `role`；前端刷新时检测 role 变化并同步 localStorage + 调用 `updateAuthHUD()` |
+
+---
+
+### v0.3.3 — Google OAuth 重定向到 localhost 修复
+
+**现象：** Google 登录完成后跳转到 `http://localhost:3000` 而非游戏页面。
+
+**原因：** Supabase 项目的 **Site URL** 仍为初始默认值 `http://localhost:3000`。当 `redirectTo` 参数不在 Supabase 白名单时，Supabase 忽略该参数并回退到 Site URL。
+
+**修复（Supabase Dashboard 手动配置）：**
+- Authentication → URL Configuration → Site URL 改为生产域名
+- Redirect URLs 添加：
+  - `https://你的域名.vercel.app`
+  - `https://*-项目名.vercel.app`（通配符覆盖所有 Preview URL）
+  - `http://localhost:3000`（本地开发保留）
+
+---
+
+### v0.3.4 — Preview / Production 双环境搭建
+
+**目标：** develop branch 对应独立 Preview 环境，使用独立数据库，避免测试数据污染生产库。
+
+**Vercel 配置（手动）：**
+- 项目新建 Preview 部署，关联 `develop` branch
+- Settings → Environment Variables：同一变量名分别配置 Production 和 Preview 两套值：
+
+| 变量名 | Production | Preview |
+|---|---|---|
+| `MSW_POSTGRES_URL` | 生产 Supabase 连接池 URL | 独立 preview DB 连接池 URL |
+| `MSW_POSTGRES_URL_NON_POOLING` | 生产直连 URL | preview 直连 URL |
+| 其余变量 | 生产值 | preview 值或复用 |
+
+**Vercel Preview 保护：**
+- Preview 部署默认开启 **Vercel Authentication**（访问需登录 Vercel 账号）
+- curl 测试 Preview 接口时被拦截，报 "This page requires Vercel authentication."
+- 修复：Settings → Deployment Protection → 关闭 Vercel Authentication，或使用 `x-vercel-protection-bypass` header
+
+**环境变量未生效 Bug：**
+- 现象：Preview 下新注册用户仍存入生产数据库
+- 原因：Vercel 环境变量只对**变量修改后触发的新部署**生效，已存在的 Preview 部署使用旧变量值
+- 修复：修改环境变量后需手动触发重新部署（push 新 commit 或 Vercel Dashboard 手动 Redeploy）
+- 诊断工具：新增 `api/debug/env.js`（受 `MIGRATE_SECRET` 保护，返回当前 `VERCEL_ENV` 和 DB hostname，用于验证环境变量是否正确注入，调试完毕后删除）
