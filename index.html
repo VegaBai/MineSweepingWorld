@@ -89,6 +89,7 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #lp-hearts{font-size:26px;letter-spacing:5px;margin:10px 0 6px}
 #lp-sub{color:#778;font-size:12px;margin-bottom:18px}
 #lp-regen{font-size:11px;color:#3a2a2a;margin-top:12px;min-height:16px}
+#restart-hdr-btn{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:45}
 #hud-credits{font-size:11px;margin-top:2px;color:#b090d8}
 #hud-illuminate-btn{margin-top:6px;padding:5px 10px;font-size:11px;background:#160830;border:1px solid #5030a0;color:#c090f0;border-radius:4px;cursor:pointer;width:100%;transition:background .12s,border-color .12s;pointer-events:auto}
 #hud-illuminate-btn:hover{background:#221050}
@@ -111,7 +112,8 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
     <div id="hud-lives"></div>
     <div id="hud-credits"></div>
     <button id="hud-illuminate-btn" onclick="toggleIlluminateMode()" style="display:none">✨ Illuminate Mode</button>
-    <div id="hud-legend" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 10px;max-width:220px"></div>
+    <div style="margin-top:6px;font-size:10px;color:#5040a0;line-height:1.5">✨ Win higher tiers to earn<br>credits for illuminating lower grids</div>
+    <div id="hud-legend" style="margin-top:4px;display:flex;flex-direction:column;gap:3px"></div>
   </div>
   <div id="world-tooltip"><div class="tt-lbl" id="tt-label"></div><div class="tt-sub" id="tt-size"></div></div>
   <div id="active-banner" onclick="resumeActive()">
