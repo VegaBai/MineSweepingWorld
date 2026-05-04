@@ -1,16 +1,13 @@
 import { getPool } from '../../../lib/db.js';
 import { authenticate } from '../../../lib/auth.js';
 
-const WORLD_W = 20;
-const WORLD_H = 16;
-
 export default async function handler(req, res) {
   const user = await authenticate(req, res);
   if (!user) return;
 
   const gx = parseInt(req.query.x, 10);
   const gy = parseInt(req.query.y, 10);
-  if (isNaN(gx) || isNaN(gy) || gx < 0 || gx >= WORLD_W || gy < 0 || gy >= WORLD_H) {
+  if (isNaN(gx) || isNaN(gy) || gx < 0 || gy < 0 || gx > 999 || gy > 999) {
     return res.status(400).json({ error: 'invalid coordinates' });
   }
 

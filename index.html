@@ -194,22 +194,39 @@ const TIERS = [
 const TIER_WSUM = TIERS.reduce((s,t)=>s+t.weight, 0);
 
 // ── World Bounds ───────────────────────────────────────────────────────────
-const WORLD_W = 20, WORLD_H = 16;
+let WORLD_W = 20, WORLD_H = 16;
 
 // Active custom world map fetched from server (null = use procedural hash)
 let customWorldMap = null; // { width, height, data: Uint8Array }
+
+function applyWorldDimensions(w, h) {
+  WORLD_W = w; WORLD_H = h;
+  // Re-fit camera to show the whole world
+  const zoomX = wCvs.width  / (WORLD_W * TILE2);
+  const zoomY = wCvs.height / (WORLD_H * TILE2);
+  cam.zoom = Math.min(zoomX, zoomY) * 0.92;
+  cam.x = WORLD_W / 2;
+  cam.y = WORLD_H / 2;
+  clampCam();
+}
 
 async function fetchActiveWorldMap() {
   try {
     const r = await fetch('/api/world/map');
     if (!r.ok) return;
     const { map } = await r.json();
-    if (!map) { customWorldMap = null; return; }
+    if (!map) {
+      customWorldMap = null;
+      applyWorldDimensions(20, 16);
+      drawWorld();
+      return;
+    }
     customWorldMap = {
       width:  map.width,
       height: map.height,
       data:   new Uint8Array(map.data),
     };
+    applyWorldDimensions(map.width, map.height);
     drawWorld();
   } catch { /* ignore — use procedural map */ }
 }
