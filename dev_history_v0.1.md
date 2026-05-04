@@ -762,3 +762,115 @@ illuminateCredits 更新
   ↓
 Toast "✨ Credits earned: X×N Y×M"
 ```
+
+---
+
+## v0.7 — 世界地图周更系统（2026-05-04）
+
+### v0.7.1 需求概述
+
+- 每周一 UTC 00:00 自动更换世界地图（由管理员提前指定下一张）
+- 00:00–00:30 为维护时间：前端显示维护界面，世界地图不可用，倒计时结束自动刷新
+- 更换前：对每位玩家的历史数据（各难度点亮数量、百分比）做快照保存，清除具体游戏记录
+- 更换后：illuminate credits 全部清零，新地图重新开始
+- 首页左上角显示下次换图倒计时
+- 难度色块图例旁显示每种难度剩余未点亮格子数
+- 失败格子记入"未点亮"（remaining）
+
+---
+
+### v0.7.2 数据库（Migration 006）
+
+*`world_maps` 表新增列：*
+- `scheduled_at TIMESTAMPTZ` — 预定激活时间（管理员设置，系统在此时间 +30min 后自动切换）
+- `week_start TIMESTAMPTZ` — 本周激活时间（切换时写入 `NOW()`）
+
+*新表 `map_week_snapshots`：*
+```sql
+CREATE TABLE IF NOT EXISTS map_week_snapshots (
+  map_id  UUID     NOT NULL REFERENCES world_maps(id) ON DELETE CASCADE,
+  user_id UUID     NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+  tier    TEXT     NOT NULL,
+  total   SMALLINT NOT NULL DEFAULT 0,
+  won     SMALLINT NOT NULL DEFAULT 0,
+  lost    SMALLINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (map_id, user_id, tier)
+);
+```
+保存每位玩家在某周地图上各难度的总格数、赢格数、输格数。
+
+---
+
+### v0.7.3 api/world/map.js — 完全重写
+
+*核心逻辑：*
+
+```
+GET /api/world/map
+  │
+  ├─ isMaintenanceWindow()? (UTC 周一 00:00–00:30)
+  │   └─ 返回 { maintenance: true, resumesAt: "...T00:30:00Z" }
+  │
+  ├─ 有 scheduled_at + 30min ≤ NOW() 的地图?
+  │   └─ performSwitch(db, newMapId)
+  │       ├─ 从 grid_states 统计每用户每难度 won/lost 数
+  │       ├─ 批量 INSERT map_week_snapshots
+  │       ├─ DELETE grid_states（全清）
+  │       ├─ DELETE illuminate_credits（全清）
+  │       ├─ 旧地图 is_active=FALSE
+  │       └─ 新地图 is_active=TRUE, week_start=NOW()
+  │
+  └─ 返回当前激活地图 { map: { ..., week_start } }
+```
+
+*切换幂等性：* 新地图激活后 `scheduled_at=NULL`，下次调用不再触发切换。
+
+*并发问题：* 无分布式锁，但重复执行幂等（ON CONFLICT DO UPDATE）；最差情况是快照写两次，不影响正确性。
+
+---
+
+### v0.7.4 api/admin.js — 新增 scheduled_at 支持
+
+- GET `/admin?resource=worldmap` 列表返回中新增 `scheduled_at` 字段
+- PATCH `/admin?resource=worldmap` 新增分支：
+  - `{ id, scheduled_at }` — 先清空其他地图的 scheduled_at，再为指定地图设置预定时间（传 null 取消预定）
+  - `{ id, is_active }` — 原有激活/停用逻辑不变
+
+---
+
+### v0.7.5 world_map_generation.html — 排期 UI
+
+新增函数：
+- `getNextMondayUTC()` — 计算下周一 00:00 UTC ISO 字符串
+- `scheduleMap(id)` — PATCH `scheduled_at = getNextMondayUTC()`
+- `unscheduleMap(id)` — PATCH `scheduled_at = null`
+
+地图列表中每条记录新增：
+- 已排期：显示 **NEXT WEEK** 紫色徽章 + 激活日期 + **Unschedule** 按钮
+- 未排期且非当前激活：显示 **📅 Next Week** 按钮
+
+---
+
+### v0.7.6 index.html — 前端新增
+
+*维护界面（`#maintenance-screen`）：*
+- 全屏遮罩，z-index:300，隐藏世界地图
+- `checkMaintenanceClient()`：页面加载时先客户端判断（UTC 周一 00:00–00:30）
+- `fetchActiveWorldMap()` 同时处理服务端返回的 `{ maintenance: true }` 响应
+- `showMaintenance(resumesAt)`：启动倒计时，格式 `MM:SS`，归零后 1s 自动 `location.reload()`
+
+*换图倒计时（`#hud-countdown`）：*
+- `getNextMondayMs()` — 计算距下周一 00:00 UTC 的毫秒数
+- `updateCountdown()` — 格式：`Next map: Xd Xh Xm`（不足1天：`Xh Xm`，不足1小时：`Xm`）
+- Boot 时调用一次，随后 `setInterval(updateCountdown, 30000)` 每 30 秒更新
+
+*难度图例剩余格数（`#leg-cnt-{tier.id}`）：*
+- `buildLegend()` 改为 `div` 容器，每项末尾新增 `<span id="leg-cnt-{id}">` 占位
+- `updateLegendCounts()` — 遍历 `customWorldMap.data` 统计各难度总格数，再遍历 `store` 统计已 won 格数，显示 `剩余/总计`
+- 触发时机：`buildLegend()`、`syncLoadAll()`、`window.handleWin`、`confirmIlluminate()` 成功后
+
+*UI 其他调整（同 v0.7 一起发布）：*
+- 失败格子在世界地图上显示半透明 ↺ 图案（40%不透明度，仅格子≥10px时渲染）
+- Illuminate Mode 下世界地图鼠标改为 pointer（拖拽时仍为 grabbing）
+- 游戏页 Restart 按钮移到页面顶部居中（`position:fixed;top:10px;left:50%`），避免被右上角登录按钮遮挡
+- 左上角难度图例改为纵向排列，上方添加 illuminate 提示文字
