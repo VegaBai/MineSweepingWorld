@@ -85,6 +85,10 @@ CREATE TABLE IF NOT EXISTS world_maps (
   created_by UUID        REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migration 004: lives system
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lives SMALLINT NOT NULL DEFAULT 3;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lives_regen_at TIMESTAMPTZ DEFAULT NOW();
 `;
 
 // One-time migration — protect with a secret header

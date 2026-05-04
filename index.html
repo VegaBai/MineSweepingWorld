@@ -77,6 +77,17 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #auth-google svg{flex-shrink:0}
 .auth-divider{display:flex;align-items:center;gap:8px;margin:14px 0;color:#334;font-size:11px}
 .auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:#1a2a44}
+
+/* ── Lives ── */
+#hdr-lives{font-size:17px;letter-spacing:3px;line-height:1}
+#hud-lives{font-size:11px;margin-top:4px}
+.lheart{color:#d03030}
+.lheart.empty{color:#2a1a1a}
+#life-prompt{position:fixed;inset:0;background:rgba(0,0,8,.88);display:none;align-items:center;justify-content:center;z-index:65;backdrop-filter:blur(6px)}
+#life-box{background:#080e22;border:2px solid #7a1a1a;border-radius:12px;padding:28px 40px;text-align:center;min-width:300px;max-width:340px}
+#lp-hearts{font-size:26px;letter-spacing:5px;margin:10px 0 6px}
+#lp-sub{color:#778;font-size:12px;margin-bottom:18px}
+#lp-regen{font-size:11px;color:#3a2a2a;margin-top:12px;min-height:16px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
@@ -90,6 +101,7 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
     <div class="dim" id="hud-hint">Click any grid to start a game</div>
     <div class="dim">Drag to pan &nbsp;·&nbsp; Scroll to zoom</div>
     <div id="hud-online" style="margin-top:4px"></div>
+    <div id="hud-lives"></div>
     <div id="hud-legend" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 10px;max-width:220px"></div>
   </div>
   <div id="world-tooltip"><div class="tt-lbl" id="tt-label"></div><div class="tt-sub" id="tt-size"></div></div>
@@ -105,6 +117,7 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
     <span id="hdr-tier" style="font-size:12px;font-weight:bold;letter-spacing:.5px"></span>
     <div><span class="slbl">MINES</span><span class="sbox" id="mine-disp">0</span></div>
     <div><span class="slbl">TIME</span><span class="sbox" id="time-disp">0:00</span></div>
+    <div id="hdr-lives-wrap" style="display:none;align-items:center;gap:4px"><span class="slbl">LIVES</span><span id="hdr-lives"></span></div>
     <span style="flex:1"></span>
     <span id="hdr-status" style="font-size:13px;color:#556"></span>
     <button class="btn danger" id="restart-hdr-btn" onclick="restartCurrentGrid()" style="display:none">↺ Restart</button>
@@ -125,6 +138,21 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
   </div>
 </div>
 <div id="toast"></div>
+
+<!-- ── Life Prompt ──────────────────────────────────────────────────────── -->
+<div id="life-prompt">
+  <div id="life-box">
+    <div style="font-size:28px;margin-bottom:6px">💥</div>
+    <div style="font-size:19px;font-weight:bold;color:#f55;margin-bottom:14px">Mine Hit!</div>
+    <div id="lp-hearts"></div>
+    <div id="lp-sub"></div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button id="lp-use-btn" class="btn" onclick="useLive()" style="background:#3a1010;border-color:#7a2020;color:#f88">❤ Use a Life</button>
+      <button class="btn danger" onclick="declineLive()">Accept Loss</button>
+    </div>
+    <div id="lp-regen"></div>
+  </div>
+</div>
 
 <!-- ── Top-right controls ────────────────────────────────────────────── -->
 <a id="admin-link" href="/admin_management" style="display:none;position:fixed;top:12px;right:210px;z-index:50;background:rgba(40,20,60,.9);border:1px solid #6a3aaa;border-radius:6px;padding:7px 14px;color:#c090e0;font-family:'Consolas','Courier New',monospace;font-size:13px;pointer-events:auto;backdrop-filter:blur(4px);white-space:nowrap">⬡ Admin</a>
@@ -258,6 +286,9 @@ const NCOL = ['','#0033cc','#007700','#cc0000','#00008b','#880000','#008888','#3
 
 // ── App State ──────────────────────────────────────────────────────────────
 let screen = 'world';
+let playerLives = null;     // null = not fetched; number = current lives
+let lifePromptGrid = null;  // grid state pending life-prompt decision
+let livesRegenTO = null;
 let lastActiveKey = null;   // most recently visited active game
 let viewKey = null;
 
@@ -657,8 +688,20 @@ function updateBanner() {
 
 // ── Win / Lose ─────────────────────────────────────────────────────────────
 function handleLose(g, r, c) {
-  g.hitIdx=r*g.cols+c; g.status='lost';
+  g.hitIdx = r*g.cols+c;
   pauseTimer(g);
+  // Show life prompt if logged in and lives available
+  if (Auth.isLoggedIn() && typeof playerLives === 'number' && playerLives > 0) {
+    drawGame(); // shows the hit cell red (revealed + hitIdx set), other mines hidden
+    showLifePrompt(g);
+    return true; // signal wrapper: skip syncSave for now
+  }
+  commitLoss(g);
+  return false;
+}
+
+function commitLoss(g) {
+  g.status='lost';
   for (let i=0;i<g.total;i++) if (g.mines[i]) g.revealed[i]=1;
   drawGame();
   document.getElementById('hdr-status').textContent='✕ Game Over';
@@ -693,6 +736,84 @@ function showResult(won, g) {
 function dismissResult() {
   document.getElementById('result-overlay').style.display='none';
   goWorld();
+}
+
+// ── Life Prompt ────────────────────────────────────────────────────────────
+function heartsHtml(lives, max=3) {
+  return '<span class="lheart">❤</span>'.repeat(lives) +
+         '<span class="lheart empty">♡</span>'.repeat(max - lives);
+}
+
+function updateLivesDisplay() {
+  const el   = document.getElementById('hdr-lives');
+  const hud  = document.getElementById('hud-lives');
+  const wrap = document.getElementById('hdr-lives-wrap');
+  if (!Auth.isLoggedIn() || playerLives === null) {
+    if (wrap) wrap.style.display = 'none';
+    if (hud)  hud.textContent = '';
+    return;
+  }
+  if (wrap) wrap.style.display = 'flex';
+  if (el)   el.innerHTML = heartsHtml(playerLives);
+  if (hud)  hud.innerHTML = 'Lives: ' + heartsHtml(playerLives);
+}
+
+async function fetchLives() {
+  if (!Auth.isLoggedIn()) { playerLives = null; updateLivesDisplay(); return; }
+  try {
+    const data = await apiFetch('/lives');
+    playerLives = data.lives;
+    updateLivesDisplay();
+    scheduleRegenRefetch(data.nextRegenIn);
+  } catch { playerLives = null; updateLivesDisplay(); }
+}
+
+function scheduleRegenRefetch(nextRegenIn) {
+  clearTimeout(livesRegenTO);
+  if (nextRegenIn == null) return; // already full
+  livesRegenTO = setTimeout(fetchLives, nextRegenIn + 1000);
+}
+
+function showLifePrompt(g) {
+  lifePromptGrid = g;
+  document.getElementById('lp-hearts').innerHTML = heartsHtml(playerLives);
+  document.getElementById('lp-sub').textContent =
+    `You have ${playerLives} life${playerLives !== 1 ? 's' : ''} remaining. Use one to undo?`;
+  document.getElementById('lp-use-btn').disabled = false;
+  document.getElementById('lp-use-btn').textContent = '❤ Use a Life';
+  document.getElementById('lp-regen').textContent = '';
+  document.getElementById('life-prompt').style.display = 'flex';
+}
+
+async function useLive() {
+  if (!lifePromptGrid || playerLives <= 0) return;
+  const btn = document.getElementById('lp-use-btn');
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const data = await apiFetch('/lives', { method: 'POST' });
+    playerLives = data.lives;
+    scheduleRegenRefetch(data.nextRegenIn);
+    // Undo the mine hit
+    const g = lifePromptGrid; lifePromptGrid = null;
+    g.revealed[g.hitIdx] = 0; g.revealedCount--;
+    g.hitIdx = -1;
+    document.getElementById('life-prompt').style.display = 'none';
+    startTimer(g);
+    drawGame();
+    updateLivesDisplay();
+    document.getElementById('hdr-status').textContent = '';
+    syncSave(g.gx, g.gy);
+  } catch (e) {
+    document.getElementById('life-prompt').style.display = 'none';
+    const g = lifePromptGrid; lifePromptGrid = null;
+    if (g) { commitLoss(g); syncSave(g.gx, g.gy); }
+  }
+}
+
+function declineLive() {
+  document.getElementById('life-prompt').style.display = 'none';
+  const g = lifePromptGrid; lifePromptGrid = null;
+  if (g) { commitLoss(g); syncSave(g.gx, g.gy); }
 }
 
 function restartCurrentGrid() {
@@ -898,6 +1019,7 @@ const Auth = {
   clear() {
     this._access = this._refresh = this.username = this.userId = null;
     this.role = 'user';
+    playerLives = null; updateLivesDisplay();
     localStorage.removeItem('msw_refresh');
     localStorage.removeItem('msw_username');
     localStorage.removeItem('msw_userId');
@@ -1052,8 +1174,9 @@ window.handleWin = function(g) {
 };
 const _handleLose = handleLose;
 window.handleLose = function(g, r, c) {
-  _handleLose(g, r, c);
-  syncSave(g.gx, g.gy);
+  const pendingPrompt = _handleLose(g, r, c);
+  // If showing life prompt, syncSave is called later by useLive() or declineLive()
+  if (!pendingPrompt) syncSave(g.gx, g.gy);
 };
 
 // Patch restartCurrentGrid to delete server state
@@ -1249,6 +1372,7 @@ async function submitAuth() {
     Auth.setTokens(data);
     hideAuth();
     await syncLoadAll();      // pull server progress into local store
+    fetchLives();
     wsClient.connect();
   } catch (e) {
     errEl.textContent = e.status === 409 ? 'Username already taken'
@@ -1328,6 +1452,7 @@ async function handleOAuthCallback() {
     console.log('[oauth] logged in as:', data.username);
     Auth.setTokens(data);
     await syncLoadAll();
+    fetchLives();
     wsClient.connect();
   } catch (e) {
     console.error('[oauth] callback error:', e);
@@ -1340,6 +1465,7 @@ updateAuthHUD();
 fetchActiveWorldMap(); // always fetch — world map is public
 if (Auth.isLoggedIn()) {
   syncLoadAll();
+  fetchLives();
   wsClient.connect();
 } else {
   wsClient.connect();
