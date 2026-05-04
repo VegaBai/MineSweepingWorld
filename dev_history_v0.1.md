@@ -463,3 +463,118 @@ UPDATE users SET role = 'admin' WHERE email = 'vegabaixuan@gmail.com';
 - 原因：Vercel 环境变量只对**变量修改后触发的新部署**生效，已存在的 Preview 部署使用旧变量值
 - 修复：修改环境变量后需手动触发重新部署（push 新 commit 或 Vercel Dashboard 手动 Redeploy）
 - 诊断工具：新增 `api/debug/env.js`（受 `MIGRATE_SECRET` 保护，返回当前 `VERCEL_ENV` 和 DB hostname，用于验证环境变量是否正确注入，调试完毕后删除）
+
+---
+
+## v0.4 — 世界地图生成系统（2026-05-03）
+
+---
+
+### v0.4.1 — World Map Generation 功能
+
+Admin 可上传图片生成像素风格世界地图，并将其激活为全局世界地图。
+
+**新增页面 `world_map_generation.html`：**
+
+- 图片上传（点击或拖拽），设置最长边格子数，点击生成
+- K-means（k=7）色彩量化：用 k-means++ 初始化 + 最多 30 轮迭代
+- 颜色→难度映射：按像素数量排序，最多的簇 → 背景（黑色/不可玩），其余 6 簇由多到少依次对应 EASY → MASTER
+- 量化后颜色展示在调色板中，可单击选色、在格子 canvas 上绘制修改
+- TXT 导出（每行一行格子，0=背景 1-6=难度，带注释头）/ 导入（解析后恢复编辑状态）
+- 填写名称后保存到数据库，已保存地图列表可 Activate / Deactivate / Load 回编辑 / Delete
+- 背景格子（值 0）在世界地图中显示为黑色，不可点击进入游戏
+
+**新增 API：**
+
+| 端点 | 说明 |
+|---|---|
+| `api/admin/worldmap.js` → 合并后 `api/admin.js` | GET 列表/GET by id / POST 创建 / PATCH 激活切换 / DELETE 删除（admin only） |
+| `api/world/map.js` | GET 当前激活的世界地图数据（公开） |
+
+**数据库变更（Migration 003）：**
+```sql
+CREATE TABLE IF NOT EXISTS world_maps (
+  id         UUID     PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       TEXT     NOT NULL,
+  data       TEXT     NOT NULL,   -- JSON 序列化的 flat Uint8Array，值 0=背景 1-6=难度
+  width      SMALLINT NOT NULL DEFAULT 20,
+  height     SMALLINT NOT NULL DEFAULT 16,
+  is_active  BOOLEAN  NOT NULL DEFAULT FALSE,
+  created_by UUID     REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**前端变更（index.html）：**
+- `WORLD_W` / `WORLD_H` 从 `const` 改为 `let`，由激活地图尺寸动态决定
+- 新增 `fetchActiveWorldMap()`：启动时拉取激活地图，更新 `customWorldMap` 状态
+- 新增 `applyWorldDimensions(w, h)`：更新世界尺寸并自动重算相机缩放与位置（自适应显示全图）
+- `gridTier(gx, gy)` 优先读取 `customWorldMap.data`；值为 0 时返回 `null`（背景）
+- `drawWorld()` 背景格子跳过，填黑色
+- `openGrid()` 背景格子直接 return，不可进入游戏
+- `showTT()` 背景格子不显示 tooltip
+
+**路由：**
+- `vercel.json` 新增 `/world_map_generation` → `world_map_generation.html`
+- `admin_management.html` 顶栏新增「🗺 World Map Generation」跳转按钮
+
+---
+
+### v0.4.2 — Vercel Serverless Function 数量超限
+
+**现象：** Vercel 构建报错，超过 Hobby 计划 12 个 Serverless Function 上限（当时共 14 个）。
+
+**原因：** 5 个 auth 子路由 + 2 个 admin 子路由各自独立成文件。
+
+**修复：** 合并同类 API 文件，通过 query 参数路由：
+
+| 合并前（7 个文件） | 合并后（1 个文件） | 路由方式 |
+|---|---|---|
+| `api/auth/login.js` `register.js` `logout.js` `refresh.js` `google.js` | `api/auth.js` | `?action=login\|register\|logout\|refresh\|google` |
+| `api/admin/users.js` `api/admin/worldmap.js` | `api/admin.js` | `?resource=users\|worldmap` |
+
+合并后共 **9 个** Serverless Functions，低于 12 的上限。同时清理了遗留的空目录 `api/auth/` `api/admin/` `api/debug/`。
+
+所有前端调用 URL 同步更新（如 `/api/auth/login` → `/api/auth?action=login`）。
+
+---
+
+### v0.4.3 — Admin 页面空白 / Access Denied
+
+**现象：** 点进 admin_management 页面显示空白；点进 World Map Generation 显示"Access Denied"。
+
+**原因：** `admin_management.html` 和 `world_map_generation.html` 中的 `getAccessToken()` 只检查 `localStorage.msw_access` 是否存在，不验证 JWT 是否过期。Access token 15 分钟有效期过后仍原样发给 API，后端返回 401，前端判断为 Access Denied。
+
+**修复（两个 HTML 页面）：**
+
+1. `getAccessToken()` 新增 JWT expiry 解码检查：
+```js
+if (Auth.token) {
+  const exp = JSON.parse(atob(Auth.token.split('.')[1])).exp;
+  if (exp * 1000 > Date.now() + 10_000) return Auth.token; // 还有 10 秒以上有效期才使用
+  localStorage.removeItem('msw_access');
+}
+// 自动用 refresh token 换新的 access token
+```
+
+2. `apiFetch()` 新增 401 自动重试：收到 401 时清除旧 access token、重新 refresh、用新 token 再试一次。
+
+---
+
+### v0.4.4 — 自定义世界地图仅显示左上角
+
+**现象：** 激活 40×40 的像素猫地图后，游戏世界只显示左上角一小块，40×40 的内容被裁剪到 20×16 范围内。
+
+**原因：** `WORLD_W = 20, WORLD_H = 16` 为硬编码常量，用于：
+- `clampCam()`：相机位置锁定范围
+- `drawWorld()`：渲染的格子范围
+- 世界边框绘制
+- `openGrid()` / hover 的坐标合法性检查
+
+激活任意尺寸的自定义地图后，这些值从未更新，导致超出 20×16 的格子既不渲染也不可交互。
+
+**修复：**
+- `WORLD_W` / `WORLD_H` 改为 `let`
+- 新增 `applyWorldDimensions(w, h)`：更新 `WORLD_W`/`WORLD_H`，按新尺寸重算 `cam.zoom` 以自适应全屏显示（取宽/高两个方向最小缩放比 × 0.92 留边），并将 `cam.x/y` 重置到世界中心
+- `fetchActiveWorldMap()` 加载地图后调用 `applyWorldDimensions(map.width, map.height)`；无激活地图时重置为 `(20, 16)`
+- `api/progress/[x]/[y].js` 移除硬编码的 `gx < WORLD_W` 坐标边界校验（改为宽松的 `0–999` 上限），避免拒绝大尺寸地图上的进度保存请求
