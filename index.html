@@ -898,7 +898,7 @@ const Auth = {
     }
     if (!this._refresh) return null;
     try {
-      const res = await fetch(`${API_BASE}/auth/refresh`, {
+      const res = await fetch(`${API_BASE}/auth?action=refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: this._refresh }),
@@ -1179,7 +1179,7 @@ let authMode = 'login'; // 'login' | 'register'
 function showAuthOrProfile() {
   if (Auth.isLoggedIn()) {
     if (confirm(`Logged in as ${Auth.username}\n\nLog out?`)) {
-      apiFetch('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken: Auth._refresh }) })
+      apiFetch('/auth?action=logout', { method: 'POST', body: JSON.stringify({ refreshToken: Auth._refresh }) })
         .catch(() => {});
       Auth.clear();
     }
@@ -1225,7 +1225,7 @@ async function submitAuth() {
 
   try {
     const payload = { username, password, ...(authMode === 'register' && email ? { email } : {}) };
-    const data = await apiFetch(`/auth/${authMode}`, {
+    const data = await apiFetch(`/auth?action=${authMode}`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -1303,8 +1303,8 @@ async function handleOAuthCallback() {
       token = session.access_token;
     }
 
-    console.log('[oauth] got token, calling /auth/google...');
-    const data = await apiFetch('/auth/google', {
+    console.log('[oauth] got token, calling /auth?action=google...');
+    const data = await apiFetch('/auth?action=google', {
       method: 'POST',
       body: JSON.stringify({ supabaseToken: token }),
     });

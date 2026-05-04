@@ -144,7 +144,7 @@ async function getAccessToken() {
   // Try stored access token first (just use it; let 401 trigger refresh)
   if (Auth.token) return Auth.token;
   if (!Auth.refresh) return null;
-  const r = await fetch(`${API_BASE}/auth/refresh`, {
+  const r = await fetch(`${API_BASE}/auth?action=refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken: Auth.refresh }),
@@ -228,7 +228,7 @@ async function saveRole(btn) {
   btn.disabled = true;
   btn.textContent = '…';
   try {
-    await apiFetch('/admin/users', {
+    await apiFetch('/admin?resource=users', {
       method: 'PATCH',
       body: JSON.stringify({ userId: uid, role }),
     });
@@ -268,7 +268,7 @@ function loadStats() {
   myUserId = Auth.userId;
 
   try {
-    const data = await apiFetch('/admin/users');
+    const data = await apiFetch('/admin?resource=users');
     allUsers = data.users;
 
     document.getElementById('loading').style.display = 'none';

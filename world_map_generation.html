@@ -205,7 +205,7 @@ const Auth = {
 async function getAccessToken() {
   if (Auth.token) return Auth.token;
   if (!Auth.refresh) return null;
-  const r = await fetch(`${API_BASE}/auth/refresh`, {
+  const r = await fetch(`${API_BASE}/auth?action=refresh`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken: Auth.refresh }),
   });
@@ -584,7 +584,7 @@ async function saveMap() {
   status.textContent = '';
 
   try {
-    await apiFetch('/admin/worldmap', {
+    await apiFetch('/admin?resource=worldmap', {
       method: 'POST',
       body: JSON.stringify({ name, data: Array.from(gridData), width: gridW, height: gridH }),
     });
@@ -608,7 +608,7 @@ async function loadSavedMaps() {
   const el = document.getElementById('saved-maps-list');
   el.innerHTML = '<div style="color:#334;font-size:11px">Loading…</div>';
   try {
-    const { maps } = await apiFetch('/admin/worldmap');
+    const { maps } = await apiFetch('/admin?resource=worldmap');
     if (maps.length === 0) {
       el.innerHTML = '<div style="color:#334;font-size:12px">No maps saved yet</div>';
       return;
@@ -636,7 +636,7 @@ async function loadSavedMaps() {
 
 async function toggleActive(id, activate) {
   try {
-    await apiFetch('/admin/worldmap', {
+    await apiFetch('/admin?resource=worldmap', {
       method: 'PATCH',
       body: JSON.stringify({ id, is_active: activate }),
     });
@@ -648,7 +648,7 @@ async function toggleActive(id, activate) {
 
 async function loadMapToEditor(id) {
   try {
-    const { map: mapData } = await apiFetch(`/admin/worldmap?id=${id}`);
+    const { map: mapData } = await apiFetch(`/admin?resource=worldmap&id=${id}`);
     if (!mapData) return;
     PALETTE[0].color = BG_COLOR;
     TIERS.forEach((t, i) => { PALETTE[i+1].color = t.color; });
@@ -667,7 +667,7 @@ async function loadMapToEditor(id) {
 async function deleteMap(id) {
   if (!confirm('Delete this map?')) return;
   try {
-    await apiFetch('/admin/worldmap', {
+    await apiFetch('/admin?resource=worldmap', {
       method: 'DELETE',
       body: JSON.stringify({ id }),
     });
@@ -696,7 +696,7 @@ function updateStatusCounts() {
 
   try {
     // Verify admin access
-    await apiFetch('/admin/users');
+    await apiFetch('/admin?resource=users');
     document.getElementById('layout').style.display = 'flex';
   } catch (e) {
     if (e.status === 401 || e.status === 403) {
