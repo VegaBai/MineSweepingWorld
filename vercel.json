@@ -1,6 +1,7 @@
 {
   "rewrites": [
-    { "source": "/admin_management", "destination": "/admin_management.html" },
-    { "source": "/((?!api/).*)",     "destination": "/index.html" }
+    { "source": "/admin_management",    "destination": "/admin_management.html" },
+    { "source": "/world_map_generation","destination": "/world_map_generation.html" },
+    { "source": "/((?!api/).*)",        "destination": "/index.html" }
   ]
 }

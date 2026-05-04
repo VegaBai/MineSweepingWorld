@@ -73,6 +73,18 @@ ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check
   CHECK (role IN ('user', 'subscriber', 'premium', 'admin'));
 UPDATE users SET role = 'admin' WHERE email = 'vegabaixuan@gmail.com';
+
+-- Migration 003: world maps
+CREATE TABLE IF NOT EXISTS world_maps (
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       TEXT        NOT NULL,
+  data       TEXT        NOT NULL,
+  width      SMALLINT    NOT NULL DEFAULT 20,
+  height     SMALLINT    NOT NULL DEFAULT 16,
+  is_active  BOOLEAN     NOT NULL DEFAULT FALSE,
+  created_by UUID        REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 `;
 
 // One-time migration — protect with a secret header

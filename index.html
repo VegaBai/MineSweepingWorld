@@ -196,8 +196,26 @@ const TIER_WSUM = TIERS.reduce((s,t)=>s+t.weight, 0);
 // ── World Bounds ───────────────────────────────────────────────────────────
 const WORLD_W = 20, WORLD_H = 16;
 
-// Deterministic tier from grid coords (stable hash)
-function gridTier(gx, gy) {
+// Active custom world map fetched from server (null = use procedural hash)
+let customWorldMap = null; // { width, height, data: Uint8Array }
+
+async function fetchActiveWorldMap() {
+  try {
+    const r = await fetch('/api/world/map');
+    if (!r.ok) return;
+    const { map } = await r.json();
+    if (!map) { customWorldMap = null; return; }
+    customWorldMap = {
+      width:  map.width,
+      height: map.height,
+      data:   new Uint8Array(map.data),
+    };
+    drawWorld();
+  } catch { /* ignore — use procedural map */ }
+}
+
+// Deterministic tier from grid coords (stable hash, fallback when no custom map)
+function gridTierHash(gx, gy) {
   let h = (Math.imul(gx, 1664525) ^ Math.imul(gy, 1013904223)) >>> 0;
   h = (Math.imul(h ^ (h >>> 16), 0x45d9f3b)) >>> 0;
   h = (Math.imul(h ^ (h >>> 16), 0x45d9f3b)) >>> 0;
@@ -205,6 +223,16 @@ function gridTier(gx, gy) {
   let r = h % TIER_WSUM;
   for (const t of TIERS) { if (r < t.weight) return t; r -= t.weight; }
   return TIERS[0];
+}
+
+// Returns TIERS entry, or null if the cell is background (not playable)
+function gridTier(gx, gy) {
+  if (customWorldMap && gx >= 0 && gx < customWorldMap.width && gy >= 0 && gy < customWorldMap.height) {
+    const v = customWorldMap.data[gy * customWorldMap.width + gx];
+    if (v === 0) return null; // background
+    return TIERS[v - 1] ?? TIERS[0];
+  }
+  return gridTierHash(gx, gy);
 }
 
 // ── World constants ────────────────────────────────────────────────────────
@@ -239,7 +267,8 @@ const gCoord = k => { const [x,y]=k.split(',').map(Number); return {gx:x,gy:y}; 
 function ensureGrid(gx, gy) {
   const k = gKey(gx,gy);
   if (!store.has(k)) {
-    const tier  = gridTier(gx, gy);
+    // fall back to hash tier if background tile (e.g. loaded from server progress)
+    const tier  = gridTier(gx, gy) ?? gridTierHash(gx, gy);
     const total = tier.rows * tier.cols;
     const mines = Math.round(total * tier.rate);
     store.set(k, {
@@ -375,6 +404,12 @@ function drawWorld() {
     const st   = g ? g.status : 'idle';
     const tier = g ? g.tier  : gridTier(tx,ty);
 
+    // Background tiles (tier=null from custom map) — draw as void, skip game logic
+    if (!tier) {
+      ctx.fillStyle='#060610'; ctx.fillRect(sx,sy,tw,th);
+      continue;
+    }
+
     let fill;
     if      (st==='won')    fill=tier.won;
     else if (st==='lost')   fill=tier.lost;
@@ -507,6 +542,7 @@ function showFinalTime(g) {
 // ── Navigation ─────────────────────────────────────────────────────────────
 function openGrid(gx, gy) {
   if (gx<0||gx>=WORLD_W||gy<0||gy>=WORLD_H) return;
+  if (!gridTier(gx, gy)) return; // background tile — not playable
   const k=gKey(gx,gy);
 
   // Pause timer of currently viewed game when switching
@@ -700,6 +736,7 @@ let wHoverTx=-1, wHoverTy=-1, hoverDelayTO=null, ttMx=0, ttMy=0;
 function showTT(gx,gy) {
   const g=store.get(gKey(gx,gy));
   const tier=g?g.tier:gridTier(gx,gy);
+  if (!tier) return; // background tile — no tooltip
   document.getElementById('tt-label').style.color=tier.dot;
   document.getElementById('tt-label').textContent=tier.label;
   document.getElementById('tt-size').textContent=`${tier.cols}×${tier.rows}  ·  ${Math.round(tier.rate*100)}% mines`;
@@ -1283,6 +1320,7 @@ async function handleOAuthCallback() {
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 updateAuthHUD();
+fetchActiveWorldMap(); // always fetch — world map is public
 if (Auth.isLoggedIn()) {
   syncLoadAll();
   wsClient.connect();

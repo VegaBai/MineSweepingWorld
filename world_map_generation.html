@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>World Map Generation — MineSweepingWorld</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monospace;min-height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* Header */
+#header{background:#080e22;border-bottom:1px solid #1a2a4a;padding:10px 20px;display:flex;align-items:center;gap:16px;flex-shrink:0}
+#header h1{font-size:14px;color:#aaccee;letter-spacing:.4px;flex:1}
+.back-btn{font-size:12px;color:#556;border:1px solid #1a2a4a;padding:5px 12px;border-radius:4px;background:#0a1220;cursor:pointer;transition:background .15s}
+.back-btn:hover{background:#111c38;color:#8ab}
+#hdr-user{font-size:12px;color:#4a6a8a}
+
+/* Layout: sidebar + main */
+#layout{display:flex;flex:1;overflow:hidden}
+
+/* Sidebar */
+#sidebar{width:280px;flex-shrink:0;background:#07091a;border-right:1px solid #1a2a4a;display:flex;flex-direction:column;overflow-y:auto;padding:14px 12px;gap:14px}
+.panel{background:#080e22;border:1px solid #1a2a4a;border-radius:6px;padding:12px}
+.panel-title{font-size:10px;color:#446;letter-spacing:.6px;margin-bottom:10px}
+
+/* Image upload */
+#drop-zone{border:2px dashed #1a2a4a;border-radius:6px;padding:20px;text-align:center;cursor:pointer;color:#334;font-size:12px;transition:border-color .15s}
+#drop-zone:hover,#drop-zone.drag-over{border-color:#2a5aaa;color:#6a9ada}
+#img-file{display:none}
+#img-preview{width:100%;border-radius:4px;margin-top:8px;display:none;image-rendering:pixelated}
+
+/* Controls */
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.field label{font-size:10px;color:#556;letter-spacing:.4px}
+.field input,.field select{background:#0a1428;border:1px solid #1e3050;border-radius:4px;padding:6px 8px;color:#c8d8f0;font-family:inherit;font-size:13px;outline:none}
+.field input:focus,.field select:focus{border-color:#3a70c0}
+
+/* Buttons */
+.btn{background:#111c38;color:#8ab;border:1px solid #1e3050;padding:7px 14px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:12px;transition:background .12s;width:100%;text-align:center}
+.btn:hover{background:#1c2d54;color:#ace}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.primary{background:#1a3a7a;color:#aaccea;border-color:#2a5aaa}
+.btn.primary:hover{background:#1e4a9a}
+.btn.success{background:#1a3a1a;color:#6aaa6a;border-color:#2a6a2a}
+.btn.success:hover{background:#1e4a1e}
+.btn.danger{color:#f88;border-color:#4a2020}
+.btn.danger:hover{background:#2a1818}
+.btn-row{display:flex;gap:8px}
+.btn-row .btn{flex:1}
+
+/* Palette */
+#palette{display:flex;flex-wrap:wrap;gap:6px}
+.pal-item{display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:4px;cursor:pointer;border:2px solid transparent;transition:border-color .12s;font-size:11px;width:calc(50% - 3px)}
+.pal-item.selected{border-color:#fff}
+.pal-swatch{width:14px;height:14px;border-radius:2px;flex-shrink:0}
+
+/* Saved maps list */
+.map-item{background:#0a1428;border:1px solid #1a3050;border-radius:4px;padding:8px 10px;margin-bottom:7px;display:flex;flex-direction:column;gap:6px}
+.map-item-header{display:flex;align-items:center;gap:6px}
+.map-name{flex:1;font-size:12px;color:#aaccee;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.map-active-badge{font-size:10px;background:#1a3a1a;color:#6aaa6a;padding:2px 6px;border-radius:8px;flex-shrink:0}
+.map-date{font-size:10px;color:#334}
+.map-btns{display:flex;gap:5px}
+.map-btns .btn{padding:3px 8px;font-size:10px}
+
+/* Main canvas area */
+#main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#canvas-toolbar{background:#080e22;border-bottom:1px solid #1a2a4a;padding:8px 14px;display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap}
+#canvas-info{font-size:11px;color:#446;margin-left:auto}
+#canvas-wrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:20px;background:#050810}
+#grid-canvas{image-rendering:pixelated;cursor:crosshair;border:1px solid #2a4070}
+
+/* Status bar */
+#status-bar{background:#050810;border-top:1px solid #0e1a30;padding:5px 14px;font-size:11px;color:#334;flex-shrink:0;display:flex;gap:16px}
+
+/* Denied */
+#denied{display:none;flex:1;align-items:center;justify-content:center;flex-direction:column;gap:14px}
+#denied h2{color:#f88;font-size:22px}
+#denied p{color:#446;font-size:13px}
+
+/* Spinner */
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid #334;border-top-color:#8ab;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <button class="back-btn" onclick="location.href='/admin_management'">← Admin</button>
+  <h1>World Map Generation</h1>
+  <span id="hdr-user"></span>
+</div>
+
+<div id="denied">
+  <h2>Access Denied</h2>
+  <p>Admin only. <a href="/" style="color:#6a9ada">← Return to game</a></p>
+</div>
+
+<div id="layout">
+  <!-- Sidebar -->
+  <div id="sidebar">
+
+    <!-- Image Import -->
+    <div class="panel">
+      <div class="panel-title">IMAGE IMPORT</div>
+      <div id="drop-zone" onclick="document.getElementById('img-file').click()" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        Drop image here<br>or click to select
+      </div>
+      <input type="file" id="img-file" accept="image/*" onchange="onFileSelect(event)">
+      <img id="img-preview">
+      <div style="margin-top:10px">
+        <div class="field">
+          <label>MAX SIDE (CELLS)</label>
+          <input type="number" id="max-side" value="20" min="4" max="80">
+        </div>
+        <button class="btn primary" id="gen-btn" onclick="generateMap()" disabled>Generate Grid</button>
+      </div>
+    </div>
+
+    <!-- Palette -->
+    <div class="panel">
+      <div class="panel-title">PAINT TOOL &nbsp;<span id="paint-mode-label" style="color:#6a9ada">— select a color</span></div>
+      <div id="palette"></div>
+    </div>
+
+    <!-- TXT Import/Export -->
+    <div class="panel">
+      <div class="panel-title">TXT IMPORT / EXPORT</div>
+      <div class="btn-row">
+        <button class="btn" onclick="exportTxt()">Download TXT</button>
+        <button class="btn" onclick="document.getElementById('txt-file').click()">Upload TXT</button>
+      </div>
+      <input type="file" id="txt-file" accept=".txt,text/plain" style="display:none" onchange="importTxt(event)">
+    </div>
+
+    <!-- Save to DB -->
+    <div class="panel">
+      <div class="panel-title">SAVE TO DATABASE</div>
+      <div class="field">
+        <label>MAP NAME</label>
+        <input type="text" id="map-name" placeholder="My world map…" maxlength="60">
+      </div>
+      <button class="btn success" id="save-btn" onclick="saveMap()" disabled>Save Map</button>
+      <div id="save-status" style="font-size:11px;color:#6aaa6a;min-height:16px;margin-top:6px;text-align:center"></div>
+    </div>
+
+    <!-- Saved Maps -->
+    <div class="panel">
+      <div class="panel-title" style="display:flex;align-items:center;gap:6px">
+        SAVED MAPS
+        <button class="btn" style="width:auto;padding:2px 8px;font-size:10px;margin-left:auto" onclick="loadSavedMaps()">↻ Refresh</button>
+      </div>
+      <div id="saved-maps-list"><div style="color:#334;font-size:12px">Loading…</div></div>
+    </div>
+
+  </div>
+
+  <!-- Main canvas area -->
+  <div id="main-area">
+    <div id="canvas-toolbar">
+      <span style="font-size:12px;color:#6a8aaa">GRID EDITOR</span>
+      <button class="btn" style="width:auto;padding:4px 10px;font-size:11px" onclick="clearGrid()">Clear All</button>
+      <button class="btn" style="width:auto;padding:4px 10px;font-size:11px" onclick="fillGrid()">Fill BG</button>
+      <span id="canvas-info">No grid loaded</span>
+    </div>
+    <div id="canvas-wrap">
+      <canvas id="grid-canvas"></canvas>
+    </div>
+    <div id="status-bar">
+      <span id="status-cell">—</span>
+      <span id="status-counts"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = '/api';
+const WORLD_W = 20, WORLD_H = 16;
+
+// Tier definitions (must match index.html)
+const TIERS = [
+  { id:'easy',   label:'EASY',   color:'#f5ede0' },
+  { id:'normal', label:'NORMAL', color:'#cef5dc' },
+  { id:'medium', label:'MEDIUM', color:'#cce4fc' },
+  { id:'hard',   label:'HARD',   color:'#e8d0fc' },
+  { id:'expert', label:'EXPERT', color:'#fce0b8' },
+  { id:'master', label:'MASTER', color:'#fcc8c8' },
+];
+const BG_COLOR = '#0a0c1e';
+
+// Palette: 0=background, 1-6=TIERS[0-5]
+const PALETTE = [
+  { val: 0, label: 'BG',     color: BG_COLOR },
+  ...TIERS.map((t, i) => ({ val: i + 1, label: t.label, color: t.color })),
+];
+
+// ── Auth ────────────────────────────────────────────────────────────────────
+const Auth = {
+  get token()    { return localStorage.getItem('msw_access'); },
+  get refresh()  { return localStorage.getItem('msw_refresh'); },
+  get username() { return localStorage.getItem('msw_username'); },
+  get role()     { return localStorage.getItem('msw_role'); },
+};
+
+async function getAccessToken() {
+  if (Auth.token) return Auth.token;
+  if (!Auth.refresh) return null;
+  const r = await fetch(`${API_BASE}/auth/refresh`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: Auth.refresh }),
+  });
+  if (!r.ok) return null;
+  const { accessToken } = await r.json();
+  localStorage.setItem('msw_access', accessToken);
+  return accessToken;
+}
+
+async function apiFetch(path, opts = {}) {
+  const token = await getAccessToken();
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers ?? {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  if (!res.ok) {
+    const err = Object.assign(new Error(res.statusText), { status: res.status });
+    throw err;
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+// ── Grid State ───────────────────────────────────────────────────────────────
+let gridW = WORLD_W, gridH = WORLD_H;
+let gridData = null;       // flat Uint8Array: gridData[y*gridW+x] = 0-6
+let selectedPal = 0;       // currently selected palette index (0-6)
+let imageLoaded = null;    // HTMLImageElement
+let isPainting = false;
+let cellSize = 24;
+
+// ── Canvas ──────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('grid-canvas');
+const ctx = canvas.getContext('2d');
+
+function initGrid(w, h) {
+  gridW = w; gridH = h;
+  gridData = new Uint8Array(w * h); // all 0 = background
+  resizeCanvas();
+  drawGrid();
+  updateCanvasInfo();
+  updateSaveBtn();
+}
+
+function resizeCanvas() {
+  const wrap = document.getElementById('canvas-wrap');
+  const maxW = Math.max(400, wrap.clientWidth - 40);
+  const maxH = Math.max(300, wrap.clientHeight - 40);
+  cellSize = Math.min(Math.floor(maxW / gridW), Math.floor(maxH / gridH), 40);
+  cellSize = Math.max(cellSize, 4);
+  canvas.width  = gridW * cellSize;
+  canvas.height = gridH * cellSize;
+}
+
+function drawGrid() {
+  if (!gridData) return;
+  for (let y = 0; y < gridH; y++) {
+    for (let x = 0; x < gridW; x++) {
+      const v = gridData[y * gridW + x];
+      ctx.fillStyle = PALETTE[v].color;
+      ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+    }
+  }
+  // Grid lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x <= gridW; x++) {
+    ctx.beginPath(); ctx.moveTo(x * cellSize, 0); ctx.lineTo(x * cellSize, gridH * cellSize); ctx.stroke();
+  }
+  for (let y = 0; y <= gridH; y++) {
+    ctx.beginPath(); ctx.moveTo(0, y * cellSize); ctx.lineTo(gridW * cellSize, y * cellSize); ctx.stroke();
+  }
+}
+
+function paintCell(x, y) {
+  if (!gridData || x < 0 || x >= gridW || y < 0 || y >= gridH) return;
+  if (gridData[y * gridW + x] === selectedPal) return;
+  gridData[y * gridW + x] = selectedPal;
+  ctx.fillStyle = PALETTE[selectedPal].color;
+  ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(x * cellSize + 0.5, y * cellSize + 0.5, cellSize - 1, cellSize - 1);
+  updateStatusCounts();
+}
+
+function cellFromEvent(e) {
+  const r = canvas.getBoundingClientRect();
+  return [
+    Math.floor((e.clientX - r.left) / cellSize),
+    Math.floor((e.clientY - r.top)  / cellSize),
+  ];
+}
+
+canvas.addEventListener('mousedown', e => {
+  if (!gridData) return;
+  isPainting = true;
+  const [cx, cy] = cellFromEvent(e);
+  paintCell(cx, cy);
+});
+canvas.addEventListener('mousemove', e => {
+  if (!gridData) return;
+  const [cx, cy] = cellFromEvent(e);
+  if (isPainting) paintCell(cx, cy);
+  if (cx >= 0 && cx < gridW && cy >= 0 && cy < gridH) {
+    const v = gridData[cy * gridW + cx];
+    document.getElementById('status-cell').textContent = `(${cx}, ${cy})  ${PALETTE[v].label}`;
+  }
+});
+canvas.addEventListener('mouseup', () => { isPainting = false; });
+canvas.addEventListener('mouseleave', () => { isPainting = false; });
+
+window.addEventListener('resize', () => {
+  if (!gridData) return;
+  resizeCanvas();
+  drawGrid();
+});
+
+// ── Palette UI ───────────────────────────────────────────────────────────────
+function buildPalette() {
+  const el = document.getElementById('palette');
+  el.innerHTML = PALETTE.map((p, i) => `
+    <div class="pal-item${i === selectedPal ? ' selected' : ''}" onclick="selectPal(${i})" id="pal-${i}">
+      <div class="pal-swatch" style="background:${p.color};border:1px solid rgba(255,255,255,.2)"></div>
+      <span>${p.label}</span>
+    </div>
+  `).join('');
+}
+
+function selectPal(i) {
+  selectedPal = i;
+  document.querySelectorAll('.pal-item').forEach((el, idx) => {
+    el.classList.toggle('selected', idx === i);
+  });
+  document.getElementById('paint-mode-label').textContent = `— ${PALETTE[i].label}`;
+}
+
+// ── Image processing ─────────────────────────────────────────────────────────
+function onDragOver(e) { e.preventDefault(); document.getElementById('drop-zone').classList.add('drag-over'); }
+function onDragLeave()  { document.getElementById('drop-zone').classList.remove('drag-over'); }
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadImageFile(file);
+}
+function onFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) loadImageFile(file);
+}
+
+function loadImageFile(file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    imageLoaded = img;
+    const preview = document.getElementById('img-preview');
+    preview.src = url;
+    preview.style.display = 'block';
+    document.getElementById('gen-btn').disabled = false;
+    document.getElementById('drop-zone').style.display = 'none';
+  };
+  img.src = url;
+}
+
+function generateMap() {
+  if (!imageLoaded) return;
+  const maxSide = parseInt(document.getElementById('max-side').value) || 20;
+
+  // Scale image to fit within maxSide
+  let sw = imageLoaded.naturalWidth, sh = imageLoaded.naturalHeight;
+  const scale = Math.min(maxSide / sw, maxSide / sh, 1);
+  const w = Math.max(1, Math.round(sw * scale));
+  const h = Math.max(1, Math.round(sh * scale));
+
+  // Draw to offscreen canvas at grid resolution
+  const off = document.createElement('canvas');
+  off.width = w; off.height = h;
+  const octx = off.getContext('2d');
+  octx.drawImage(imageLoaded, 0, 0, w, h);
+  const imgData = octx.getImageData(0, 0, w, h);
+  const pixels = imgData.data; // RGBA flat
+
+  // Extract RGB pixels
+  const rgb = [];
+  for (let i = 0; i < pixels.length; i += 4) {
+    rgb.push([pixels[i], pixels[i+1], pixels[i+2]]);
+  }
+
+  // K-means with k=7
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.textContent = 'Quantizing…';
+
+  setTimeout(() => {
+    const centers = kmeanspp(rgb, 7);
+    const { labels, finalCenters } = kmeansRun(rgb, centers, 30);
+
+    // Count cluster sizes
+    const counts = new Array(7).fill(0);
+    labels.forEach(l => counts[l]++);
+
+    // Sort clusters by count desc; largest → background
+    const order = [...Array(7).keys()].sort((a, b) => counts[b] - counts[a]);
+    // order[0] = background, order[1..6] = TIERS[0..5] (easy to master)
+
+    // Build mapping: cluster index → palette value (0-6)
+    const clusterToPal = new Array(7);
+    clusterToPal[order[0]] = 0; // background
+    for (let i = 1; i < 7; i++) clusterToPal[order[i]] = i;
+
+    // Update PALETTE colors with actual quantized colors
+    finalCenters.forEach((c, ci) => {
+      const palIdx = clusterToPal[ci];
+      const hex = '#' + c.map(v => Math.round(v).toString(16).padStart(2,'0')).join('');
+      PALETTE[palIdx].color = hex;
+      // keep label, update swatch only
+    });
+
+    // Build grid (map image pixels to grid cells with majority voting)
+    initGrid(w, h);
+    labels.forEach((label, i) => {
+      gridData[i] = clusterToPal[label];
+    });
+
+    buildPalette();
+    drawGrid();
+    updateCanvasInfo();
+    updateStatusCounts();
+    updateSaveBtn();
+
+    btn.disabled = false;
+    btn.textContent = 'Re-generate';
+  }, 10);
+}
+
+// K-means++ initialization
+function kmeanspp(points, k) {
+  const centers = [];
+  centers.push(points[Math.floor(Math.random() * points.length)]);
+  while (centers.length < k) {
+    const dists = points.map(p => {
+      let minD = Infinity;
+      for (const c of centers) {
+        const d = colorDist2(p, c);
+        if (d < minD) minD = d;
+      }
+      return minD;
+    });
+    const total = dists.reduce((a, b) => a + b, 0);
+    let r = Math.random() * total;
+    for (let i = 0; i < dists.length; i++) {
+      r -= dists[i];
+      if (r <= 0) { centers.push(points[i]); break; }
+    }
+    if (centers.length < k) centers.push(points[Math.floor(Math.random() * points.length)]);
+  }
+  return centers;
+}
+
+function colorDist2(a, b) {
+  return (a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2;
+}
+
+function kmeansRun(points, initCenters, maxIter) {
+  let centers = initCenters.map(c => [...c]);
+  let labels = new Array(points.length).fill(0);
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    // Assign
+    let changed = false;
+    for (let i = 0; i < points.length; i++) {
+      let best = 0, bestD = Infinity;
+      for (let j = 0; j < centers.length; j++) {
+        const d = colorDist2(points[i], centers[j]);
+        if (d < bestD) { bestD = d; best = j; }
+      }
+      if (labels[i] !== best) { labels[i] = best; changed = true; }
+    }
+    if (!changed) break;
+
+    // Update centers
+    const sums = centers.map(() => [0, 0, 0]);
+    const cnts = new Array(centers.length).fill(0);
+    for (let i = 0; i < points.length; i++) {
+      sums[labels[i]][0] += points[i][0];
+      sums[labels[i]][1] += points[i][1];
+      sums[labels[i]][2] += points[i][2];
+      cnts[labels[i]]++;
+    }
+    for (let j = 0; j < centers.length; j++) {
+      if (cnts[j] > 0) {
+        centers[j] = [sums[j][0]/cnts[j], sums[j][1]/cnts[j], sums[j][2]/cnts[j]];
+      }
+    }
+  }
+  return { labels, finalCenters: centers };
+}
+
+// ── Grid controls ────────────────────────────────────────────────────────────
+function clearGrid() {
+  if (!gridData) { initGrid(WORLD_W, WORLD_H); return; }
+  gridData.fill(0);
+  // Reset palette to defaults
+  PALETTE[0].color = BG_COLOR;
+  TIERS.forEach((t, i) => { PALETTE[i+1].color = t.color; });
+  buildPalette();
+  drawGrid();
+  updateStatusCounts();
+}
+
+function fillGrid() {
+  if (!gridData) initGrid(WORLD_W, WORLD_H);
+  gridData.fill(0);
+  drawGrid();
+  updateStatusCounts();
+}
+
+// ── TXT Import/Export ────────────────────────────────────────────────────────
+function exportTxt() {
+  if (!gridData) return;
+  const rows = [];
+  for (let y = 0; y < gridH; y++) {
+    const row = [];
+    for (let x = 0; x < gridW; x++) row.push(gridData[y * gridW + x]);
+    rows.push(row.join(' '));
+  }
+  const txt = `# MineSweepingWorld map: ${gridW}x${gridH}\n# 0=BG 1=EASY 2=NORMAL 3=MEDIUM 4=HARD 5=EXPERT 6=MASTER\n` + rows.join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
+  a.download = `world_map_${gridW}x${gridH}.txt`;
+  a.click();
+}
+
+function importTxt(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const lines = ev.target.result.split('\n').filter(l => l.trim() && !l.startsWith('#'));
+    const rows = lines.map(l => l.trim().split(/\s+/).map(Number));
+    const h = rows.length;
+    const w = Math.max(...rows.map(r => r.length));
+    if (h < 1 || w < 1) return alert('Invalid TXT format');
+    // Reset palette to defaults since we lost quantized colors
+    PALETTE[0].color = BG_COLOR;
+    TIERS.forEach((t, i) => { PALETTE[i+1].color = t.color; });
+    buildPalette();
+    initGrid(w, h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        gridData[y * gridW + x] = Math.min(6, Math.max(0, rows[y][x] ?? 0));
+      }
+    }
+    drawGrid();
+    updateStatusCounts();
+    updateSaveBtn();
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+// ── DB Save / Load ────────────────────────────────────────────────────────────
+function updateSaveBtn() {
+  document.getElementById('save-btn').disabled = !gridData;
+}
+
+async function saveMap() {
+  if (!gridData) return;
+  const name = document.getElementById('map-name').value.trim();
+  if (!name) { document.getElementById('map-name').focus(); return; }
+
+  const btn = document.getElementById('save-btn');
+  const status = document.getElementById('save-status');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  status.textContent = '';
+
+  try {
+    await apiFetch('/admin/worldmap', {
+      method: 'POST',
+      body: JSON.stringify({ name, data: Array.from(gridData), width: gridW, height: gridH }),
+    });
+    btn.textContent = '✓ Saved';
+    status.textContent = 'Map saved successfully';
+    loadSavedMaps();
+  } catch (e) {
+    btn.textContent = 'Save Map';
+    status.style.color = '#f88';
+    status.textContent = 'Save failed: ' + e.message;
+  } finally {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = 'Save Map';
+      status.style.color = '#6aaa6a';
+    }, 2000);
+  }
+}
+
+async function loadSavedMaps() {
+  const el = document.getElementById('saved-maps-list');
+  el.innerHTML = '<div style="color:#334;font-size:11px">Loading…</div>';
+  try {
+    const { maps } = await apiFetch('/admin/worldmap');
+    if (maps.length === 0) {
+      el.innerHTML = '<div style="color:#334;font-size:12px">No maps saved yet</div>';
+      return;
+    }
+    el.innerHTML = maps.map(m => `
+      <div class="map-item" id="map-${m.id}">
+        <div class="map-item-header">
+          <span class="map-name" title="${m.name}">${m.name}</span>
+          ${m.is_active ? '<span class="map-active-badge">ACTIVE</span>' : ''}
+        </div>
+        <div class="map-date">${m.width}×${m.height} · ${new Date(m.created_at).toLocaleDateString()}</div>
+        <div class="map-btns">
+          <button class="btn${m.is_active ? '' : ' primary'}" onclick="toggleActive('${m.id}',${!m.is_active})">
+            ${m.is_active ? 'Deactivate' : 'Activate'}
+          </button>
+          <button class="btn" onclick="loadMapToEditor('${m.id}')">Load</button>
+          <button class="btn danger" onclick="deleteMap('${m.id}')">Del</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = `<div style="color:#f88;font-size:12px">Error: ${e.message}</div>`;
+  }
+}
+
+async function toggleActive(id, activate) {
+  try {
+    await apiFetch('/admin/worldmap', {
+      method: 'PATCH',
+      body: JSON.stringify({ id, is_active: activate }),
+    });
+    loadSavedMaps();
+  } catch (e) {
+    alert('Failed: ' + e.message);
+  }
+}
+
+async function loadMapToEditor(id) {
+  try {
+    const { map: mapData } = await apiFetch(`/admin/worldmap?id=${id}`);
+    if (!mapData) return;
+    PALETTE[0].color = BG_COLOR;
+    TIERS.forEach((t, i) => { PALETTE[i+1].color = t.color; });
+    buildPalette();
+    initGrid(mapData.width, mapData.height);
+    const data = Array.isArray(mapData.data) ? mapData.data : JSON.parse(mapData.data);
+    for (let i = 0; i < data.length; i++) gridData[i] = Math.min(6, Math.max(0, data[i]));
+    drawGrid();
+    updateStatusCounts();
+    document.getElementById('map-name').value = mapData.name;
+  } catch (e) {
+    alert('Failed to load map: ' + e.message);
+  }
+}
+
+async function deleteMap(id) {
+  if (!confirm('Delete this map?')) return;
+  try {
+    await apiFetch('/admin/worldmap', {
+      method: 'DELETE',
+      body: JSON.stringify({ id }),
+    });
+    loadSavedMaps();
+  } catch (e) {
+    alert('Failed: ' + e.message);
+  }
+}
+
+// ── Status / info helpers ─────────────────────────────────────────────────────
+function updateCanvasInfo() {
+  document.getElementById('canvas-info').textContent = gridData ? `${gridW} × ${gridH} cells` : 'No grid loaded';
+}
+
+function updateStatusCounts() {
+  if (!gridData) return;
+  const counts = new Array(7).fill(0);
+  gridData.forEach(v => counts[v]++);
+  const parts = PALETTE.map((p, i) => `${p.label}: ${counts[i]}`);
+  document.getElementById('status-counts').textContent = parts.join('  ·  ');
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+(async () => {
+  if (Auth.username) document.getElementById('hdr-user').textContent = `⬡ ${Auth.username}`;
+
+  try {
+    // Verify admin access
+    await apiFetch('/admin/users');
+    document.getElementById('layout').style.display = 'flex';
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) {
+      document.getElementById('denied').style.display = 'flex';
+      document.getElementById('layout').style.display = 'none';
+    }
+    return;
+  }
+
+  buildPalette();
+  selectPal(0);
+
+  // Start with a blank default-sized grid
+  initGrid(WORLD_W, WORLD_H);
+
+  await loadSavedMaps();
+})();
+</script>
+</body>
+</html>
