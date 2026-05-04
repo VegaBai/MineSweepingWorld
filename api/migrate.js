@@ -111,6 +111,20 @@ CREATE TABLE IF NOT EXISTS illuminate_credits (
   credits  INT  NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, tier)
 );
+
+-- Migration 006: world map rotation
+ALTER TABLE world_maps ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ;
+ALTER TABLE world_maps ADD COLUMN IF NOT EXISTS week_start   TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS map_week_snapshots (
+  map_id  UUID     NOT NULL REFERENCES world_maps(id) ON DELETE CASCADE,
+  user_id UUID     NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+  tier    TEXT     NOT NULL,
+  total   SMALLINT NOT NULL DEFAULT 0,
+  won     SMALLINT NOT NULL DEFAULT 0,
+  lost    SMALLINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (map_id, user_id, tier)
+);
 `;
 
 // One-time migration — protect with a secret header

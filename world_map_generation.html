@@ -622,6 +622,27 @@ async function saveMap() {
   }
 }
 
+function getNextMondayUTC() {
+  const now=new Date();
+  const d=now.getUTCDay();
+  const days=d===0?1:(8-d)%7||7;
+  return new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()+days,0,0,0,0)).toISOString();
+}
+
+async function scheduleMap(id) {
+  const scheduledAt=getNextMondayUTC();
+  try {
+    await apiFetch('/admin?resource=worldmap',{method:'PATCH',body:JSON.stringify({id,scheduled_at:scheduledAt})});
+    loadSavedMaps();
+  } catch(e){ alert('Failed: '+e.message); }
+}
+async function unscheduleMap(id) {
+  try {
+    await apiFetch('/admin?resource=worldmap',{method:'PATCH',body:JSON.stringify({id,scheduled_at:null})});
+    loadSavedMaps();
+  } catch(e){ alert('Failed: '+e.message); }
+}
+
 async function loadSavedMaps() {
   const el = document.getElementById('saved-maps-list');
   el.innerHTML = '<div style="color:#334;font-size:11px">Loading…</div>';
@@ -631,22 +652,30 @@ async function loadSavedMaps() {
       el.innerHTML = '<div style="color:#334;font-size:12px">No maps saved yet</div>';
       return;
     }
-    el.innerHTML = maps.map(m => `
+    const nextMon=getNextMondayUTC();
+    el.innerHTML = maps.map(m => {
+      const isScheduled=!!m.scheduled_at;
+      const schedLabel=isScheduled
+        ? `<span class="map-active-badge" style="background:#2a1060;color:#c090f0;border-color:#6030a0">NEXT WEEK</span>`
+        : '';
+      return `
       <div class="map-item" id="map-${m.id}">
         <div class="map-item-header">
           <span class="map-name" title="${m.name}">${m.name}</span>
-          ${m.is_active ? '<span class="map-active-badge">ACTIVE</span>' : ''}
+          ${m.is_active ? '<span class="map-active-badge">ACTIVE</span>' : ''}${schedLabel}
         </div>
-        <div class="map-date">${m.width}×${m.height} · ${new Date(m.created_at).toLocaleDateString()}</div>
+        <div class="map-date">${m.width}×${m.height} · ${new Date(m.created_at).toLocaleDateString()}${isScheduled?' · Activates '+new Date(nextMon).toLocaleDateString()+' UTC':''}</div>
         <div class="map-btns">
           <button class="btn${m.is_active ? '' : ' primary'}" onclick="toggleActive('${m.id}',${!m.is_active})">
             ${m.is_active ? 'Deactivate' : 'Activate'}
           </button>
+          ${!m.is_active&&!isScheduled?`<button class="btn" style="border-color:#6030a0;color:#c090f0" onclick="scheduleMap('${m.id}')">📅 Next Week</button>`:''}
+          ${isScheduled?`<button class="btn danger" onclick="unscheduleMap('${m.id}')">Unschedule</button>`:''}
           <button class="btn" onclick="loadMapToEditor('${m.id}')">Load</button>
           <button class="btn danger" onclick="deleteMap('${m.id}')">Del</button>
         </div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   } catch (e) {
     el.innerHTML = `<div style="color:#f88;font-size:12px">Error: ${e.message}</div>`;
   }

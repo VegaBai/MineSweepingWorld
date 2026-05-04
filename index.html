@@ -96,6 +96,12 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #hud-illuminate-btn.active{background:#380c90;border-color:#c090f0;color:#f0d0ff}
 #illuminate-prompt{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:200;background:rgba(0,0,0,.75)}
 #illuminate-box{background:#0e0820;border:1px solid #7040c0;border-radius:12px;padding:32px 28px;max-width:320px;width:90%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.8)}
+#maintenance-screen{position:fixed;inset:0;background:#060610;z-index:300;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:0}
+#maintenance-box{max-width:420px;padding:24px}
+#maint-title{font-size:22px;font-weight:bold;color:#aaccee;margin-bottom:10px;letter-spacing:.5px}
+#maint-sub{color:#556;font-size:13px;margin-bottom:20px;line-height:1.8}
+#maint-timer{font-size:36px;font-weight:bold;color:#6a9ada;letter-spacing:3px;font-variant-numeric:tabular-nums;margin-bottom:6px}
+#maint-hint{font-size:11px;color:#334}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
@@ -106,6 +112,7 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
   <div id="world-hud">
     <div id="hud-pos">Center: (50, 50)</div>
     <div id="hud-zoom">Zoom: 1.00×</div>
+    <div id="hud-countdown" style="font-size:10px;color:#334"></div>
     <div class="dim" id="hud-hint">Click any grid to start a game</div>
     <div class="dim">Drag to pan &nbsp;·&nbsp; Scroll to zoom</div>
     <div id="hud-online" style="margin-top:4px"></div>
@@ -175,6 +182,17 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
       <button id="ip-confirm-btn" class="btn" onclick="confirmIlluminate()" style="background:#1a0840;border-color:#8040d0;color:#d0a0ff">✨ Illuminate</button>
       <button class="btn danger" onclick="cancelIlluminate()">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Maintenance Screen ────────────────────────────────────────────── -->
+<div id="maintenance-screen">
+  <div id="maintenance-box">
+    <div style="font-size:40px;margin-bottom:14px">🔧</div>
+    <div id="maint-title">Weekly Maintenance</div>
+    <div id="maint-sub">A new world map is being prepared.<br>The game will resume shortly.</div>
+    <div id="maint-timer">00:00</div>
+    <div id="maint-hint">Page will refresh automatically</div>
   </div>
 </div>
 
@@ -263,24 +281,25 @@ function applyWorldDimensions(w, h) {
 }
 
 async function fetchActiveWorldMap() {
+  if(checkMaintenanceClient()) return;
   try {
-    const r = await fetch('/api/world/map');
-    if (!r.ok) return;
-    const { map } = await r.json();
-    if (!map) {
-      customWorldMap = null;
-      applyWorldDimensions(20, 16);
+    const r=await fetch('/api/world/map');
+    if(!r.ok) return;
+    const data=await r.json();
+    if(data.maintenance){ showMaintenance(data.resumesAt); return; }
+    const {map}=data;
+    if(!map){
+      customWorldMap=null;
+      applyWorldDimensions(20,16);
       drawWorld();
+      buildLegend();
       return;
     }
-    customWorldMap = {
-      width:  map.width,
-      height: map.height,
-      data:   new Uint8Array(map.data),
-    };
-    applyWorldDimensions(map.width, map.height);
+    customWorldMap={width:map.width,height:map.height,data:new Uint8Array(map.data)};
+    applyWorldDimensions(map.width,map.height);
     drawWorld();
-  } catch { /* ignore — use procedural map */ }
+    buildLegend();
+  } catch { /* use procedural map */ }
 }
 
 // Deterministic tier from grid coords (stable hash, fallback when no custom map)
@@ -948,6 +967,7 @@ async function confirmIlluminate() {
     illuminatePromptData = null;
     document.getElementById('illuminate-prompt').style.display = 'none';
     updateCreditsDisplay();
+    updateLegendCounts();
     showToast('✨ Grid illuminated!');
   } catch (e) {
     btn.disabled = false; btn.textContent = '✨ Illuminate';
@@ -1116,13 +1136,81 @@ gCvs.addEventListener('mouseleave',()=>{ hoverR=hoverC=-1; drawGame(); });
 // ── Legend ─────────────────────────────────────────────────────────────────
 function buildLegend() {
   const el=document.getElementById('hud-legend');
+  el.innerHTML='';
   TIERS.forEach(t=>{
-    const s=document.createElement('span');
+    const s=document.createElement('div');
     s.style.cssText=`display:flex;align-items:center;gap:4px;font-size:11px;white-space:nowrap`;
     s.innerHTML=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${t.dot}"></span>`+
-                `<span style="color:${t.text}">${t.label}</span>`;
+                `<span style="color:${t.text}">${t.label}</span>`+
+                `<span id="leg-cnt-${t.id}" style="color:#334;font-size:10px"></span>`;
     el.appendChild(s);
   });
+  updateLegendCounts();
+}
+
+function updateLegendCounts() {
+  if (!customWorldMap) {
+    TIERS.forEach(t => { const e=document.getElementById('leg-cnt-'+t.id); if(e) e.textContent=''; });
+    return;
+  }
+  const totals={}, won={};
+  TIERS.forEach(t=>{totals[t.id]=0; won[t.id]=0;});
+  for (let y=0;y<customWorldMap.height;y++)
+    for (let x=0;x<customWorldMap.width;x++) {
+      const tier=gridTier(x,y);
+      if(tier) totals[tier.id]++;
+    }
+  for (const g of store.values())
+    if(g.status==='won'&&g.tier) won[g.tier.id]++;
+  TIERS.forEach(t=>{
+    const e=document.getElementById('leg-cnt-'+t.id);
+    if(!e) return;
+    const tot=totals[t.id];
+    if(!tot){e.textContent='';return;}
+    e.textContent=` ${tot-won[t.id]}/${tot}`;
+  });
+}
+
+function getNextMondayMs() {
+  const now=new Date();
+  const d=now.getUTCDay(); // 0=Sun,1=Mon...
+  const daysTo=d===0?1:(8-d)%7||7;
+  return Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()+daysTo,0,0,0,0)-now.getTime();
+}
+
+function updateCountdown() {
+  const el=document.getElementById('hud-countdown');
+  if(!el) return;
+  const ms=getNextMondayMs();
+  const s=Math.floor(ms/1000);
+  const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);
+  el.textContent=d>0?`Next map: ${d}d ${h}h ${m}m`:h>0?`Next map: ${h}h ${m}m`:`Next map: ${m}m`;
+}
+
+let maintTO=null;
+function showMaintenance(resumesAt) {
+  const el=document.getElementById('maintenance-screen');
+  if(el) el.style.display='flex';
+  document.getElementById('world-screen').style.display='none';
+  function tick(){
+    const ms=new Date(resumesAt).getTime()-Date.now();
+    const t=document.getElementById('maint-timer');
+    if(ms<=0){ if(t) t.textContent='00:00'; clearInterval(maintTO); setTimeout(()=>location.reload(),1000); return; }
+    const m=Math.floor(ms/60000),s=Math.floor((ms%60000)/1000);
+    if(t) t.textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+  tick();
+  maintTO=setInterval(tick,1000);
+}
+
+function checkMaintenanceClient() {
+  const now=new Date();
+  if(now.getUTCDay()===1&&now.getUTCHours()===0&&now.getUTCMinutes()<30){
+    const resumesAt=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate(),0,30,0)).toISOString();
+    showMaintenance(resumesAt);
+    return true;
+  }
+  return false;
 }
 
 // ── Main Loop ──────────────────────────────────────────────────────────────
@@ -1285,6 +1373,7 @@ async function syncLoadAll() {
       const g = ensureGrid(p.gx, p.gy);
       payloadToGrid(p, g);
     }
+    updateLegendCounts();
   } catch (e) {
     console.warn('[sync] load failed:', e.message);
   }
@@ -1331,6 +1420,7 @@ window.handleWin = function(g) {
   _handleWin(g);
   syncSave(g.gx, g.gy);
   awardIlluminateCredits(g.tier.id);
+  updateLegendCounts();
 };
 const _handleLose = handleLose;
 window.handleLose = function(g, r, c) {
@@ -1634,6 +1724,8 @@ async function handleOAuthCallback() {
 // ── Boot ───────────────────────────────────────────────────────────────────
 updateAuthHUD();
 fetchActiveWorldMap(); // always fetch — world map is public
+updateCountdown();
+setInterval(updateCountdown, 30000);
 fetchIlluminateSettings(); // public endpoint
 if (Auth.isLoggedIn()) {
   syncLoadAll();

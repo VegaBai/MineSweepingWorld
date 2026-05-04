@@ -59,7 +59,7 @@ async function handleWorldmap(req, res, user, db) {
       return res.json({ map: row });
     }
     const r = await db.query(
-      'SELECT id, name, width, height, is_active, created_at FROM world_maps ORDER BY created_at DESC'
+      'SELECT id, name, width, height, is_active, scheduled_at, created_at FROM world_maps ORDER BY created_at DESC'
     );
     return res.json({ maps: r.rows });
   }
@@ -74,15 +74,25 @@ async function handleWorldmap(req, res, user, db) {
     return res.status(201).json({ map: r.rows[0] });
   }
   if (req.method === 'PATCH') {
-    const { id, is_active } = req.body ?? {};
+    const { id, is_active, scheduled_at } = req.body ?? {};
     if (!id) return res.status(400).json({ error: 'id required' });
-    if (is_active) {
-      await db.query('UPDATE world_maps SET is_active = FALSE');
-      await db.query('UPDATE world_maps SET is_active = TRUE WHERE id = $1', [id]);
-    } else {
-      await db.query('UPDATE world_maps SET is_active = FALSE WHERE id = $1', [id]);
+    if (is_active !== undefined) {
+      if (is_active) {
+        await db.query('UPDATE world_maps SET is_active = FALSE');
+        await db.query('UPDATE world_maps SET is_active = TRUE WHERE id = $1', [id]);
+      } else {
+        await db.query('UPDATE world_maps SET is_active = FALSE WHERE id = $1', [id]);
+      }
+      return res.json({ ok: true });
     }
-    return res.json({ ok: true });
+    if ('scheduled_at' in (req.body ?? {})) {
+      await db.query('UPDATE world_maps SET scheduled_at=NULL WHERE scheduled_at IS NOT NULL');
+      if (scheduled_at) {
+        await db.query('UPDATE world_maps SET scheduled_at=$1 WHERE id=$2', [scheduled_at, id]);
+      }
+      return res.json({ ok: true });
+    }
+    return res.status(400).json({ error: 'is_active or scheduled_at required' });
   }
   if (req.method === 'DELETE') {
     const { id } = req.body ?? {};
