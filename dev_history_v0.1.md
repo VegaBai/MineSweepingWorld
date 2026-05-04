@@ -578,3 +578,66 @@ if (Auth.token) {
 - 新增 `applyWorldDimensions(w, h)`：更新 `WORLD_W`/`WORLD_H`，按新尺寸重算 `cam.zoom` 以自适应全屏显示（取宽/高两个方向最小缩放比 × 0.92 留边），并将 `cam.x/y` 重置到世界中心
 - `fetchActiveWorldMap()` 加载地图后调用 `applyWorldDimensions(map.width, map.height)`；无激活地图时重置为 `(20, 16)`
 - `api/progress/[x]/[y].js` 移除硬编码的 `gx < WORLD_W` 坐标边界校验（改为宽松的 `0–999` 上限），避免拒绝大尺寸地图上的进度保存请求
+
+---
+
+## v0.5 — 生命系统（2026-05-04）
+
+---
+
+### v0.5.1 — 生命系统设计与实现
+
+**需求：**
+- 每位登录玩家起始拥有 3 条命，以红心图标展示
+- 踩雷时不立即揭露所有地雷，而是弹出提示询问是否消耗一条命撤回操作
+- 选择消耗：扣除一条命，取消本次踩雷，继续游戏
+- 选择不消耗，或当前已无命：正式判负，揭露全部地雷
+- 生命值每 15 分钟自动恢复 1 条，上限 3 条
+
+**数据库变更（Migration 004）：**
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lives SMALLINT NOT NULL DEFAULT 3;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lives_regen_at TIMESTAMPTZ DEFAULT NOW();
+```
+
+**新增 API `api/lives.js`（第 10 个 Serverless Function，未超限）：**
+
+| 方法 | 说明 |
+|---|---|
+| `GET /api/lives` | 返回当前命数（含自动恢复计算）和下次恢复剩余毫秒 |
+| `POST /api/lives` | 原子扣除 1 条命；从满命开始计时恢复 |
+
+恢复逻辑（服务端）：`GET` 时计算自上次 `lives_regen_at` 起累计可恢复的命数（`floor(elapsed / 15min)`），命数不足上限时才推进时钟。`POST` 使用单条 `UPDATE ... CASE` 原子扣减，从满命状态扣减时将 `lives_regen_at` 重置为当前时间，开始计时。
+
+**前端变更（index.html）：**
+
+*状态变量：*
+- `playerLives`：当前命数（`null` = 未获取 / 未登录，`number` = 已获取）
+- `lifePromptGrid`：等待玩家做出决定的格子对象引用
+- `livesRegenTO`：下次自动刷新命数的定时器
+
+*显示：*
+- 游戏界面顶栏新增 `LIVES ❤❤♡` 显示区（仅登录时可见）
+- 世界地图 HUD 新增同步显示
+
+*踩雷拦截逻辑：*
+
+```
+handleLose(g, r, c)
+├─ 已登录 && playerLives > 0
+│   ├─ 仅设置 hitIdx（展示踩中的红色格子，其余地雷保持隐藏）
+│   ├─ pauseTimer
+│   ├─ drawGame（单格高亮）
+│   ├─ showLifePrompt → 弹出 💥 对话框
+│   └─ return true（通知 wrapper 跳过 syncSave）
+└─ 无命 / 未登录 → commitLoss（正式判负 + syncSave）
+```
+
+*玩家操作：*
+- **❤ Use a Life**：`POST /api/lives` → 扣命 → 撤销踩雷（`revealed[hitIdx]=0, revealedCount--, hitIdx=-1`）→ 恢复计时器 → `syncSave`（保存继续状态）
+- **Accept Loss**：调用 `commitLoss`（揭露全部地雷 + 结算弹窗）→ `syncSave`（保存失败状态）
+
+*其他：*
+- 登录 / OAuth 回调后自动调用 `fetchLives()`
+- 登出时 `playerLives = null`，隐藏命数显示
+- `scheduleRegenRefetch(nextRegenIn)`：在客户端根据服务端返回的剩余毫秒设置定时器，到点自动重新请求命数并更新显示（无需手动刷新）
