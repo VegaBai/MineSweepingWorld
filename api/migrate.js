@@ -89,6 +89,28 @@ CREATE TABLE IF NOT EXISTS world_maps (
 -- Migration 004: lives system
 ALTER TABLE users ADD COLUMN IF NOT EXISTS lives SMALLINT NOT NULL DEFAULT 3;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS lives_regen_at TIMESTAMPTZ DEFAULT NOW();
+
+-- Migration 005: game settings + illuminate credits
+CREATE TABLE IF NOT EXISTS game_settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+INSERT INTO game_settings (key, value) VALUES
+  ('life_regen_minutes', '15'),
+  ('illuminate_master', '{"expert":1,"hard":2,"medium":3,"normal":5,"easy":8}'),
+  ('illuminate_expert', '{"hard":1,"medium":2,"normal":3,"easy":5}'),
+  ('illuminate_hard',   '{"medium":1,"normal":2,"easy":3}'),
+  ('illuminate_medium', '{"normal":1,"easy":2}'),
+  ('illuminate_normal', '{"easy":1}')
+ON CONFLICT (key) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS illuminate_credits (
+  user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tier     TEXT NOT NULL,
+  credits  INT  NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, tier)
+);
 `;
 
 // One-time migration — protect with a secret header

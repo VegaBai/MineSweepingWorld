@@ -28,6 +28,23 @@ async function handleUsers(req, res, user, db) {
   res.status(405).end();
 }
 
+async function handleSettings(req, res, db) {
+  if (req.method === 'GET') {
+    const r = await db.query('SELECT key, value FROM game_settings ORDER BY key');
+    return res.json({ settings: Object.fromEntries(r.rows.map(row => [row.key, row.value])) });
+  }
+  if (req.method === 'PATCH') {
+    const { key, value } = req.body ?? {};
+    if (!key || value === undefined || value === null) return res.status(400).json({ error: 'key and value required' });
+    await db.query(
+      'INSERT INTO game_settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=$2',
+      [key, String(value)]
+    );
+    return res.status(204).end();
+  }
+  res.status(405).end();
+}
+
 async function handleWorldmap(req, res, user, db) {
   if (req.method === 'GET') {
     const { id } = req.query ?? {};
@@ -86,5 +103,6 @@ export default async function handler(req, res) {
 
   if (resource === 'users')    return handleUsers(req, res, user, db);
   if (resource === 'worldmap') return handleWorldmap(req, res, user, db);
+  if (resource === 'settings') return handleSettings(req, res, db);
   res.status(404).json({ error: 'unknown resource' });
 }

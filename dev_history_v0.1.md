@@ -641,3 +641,124 @@ handleLose(g, r, c)
 - 登录 / OAuth 回调后自动调用 `fetchLives()`
 - 登出时 `playerLives = null`，隐藏命数显示
 - `scheduleRegenRefetch(nextRegenIn)`：在客户端根据服务端返回的剩余毫秒设置定时器，到点自动重新请求命数并更新显示（无需手动刷新）
+---
+
+## v0.6 — Illuminate System (2026-05-03)
+
+### v0.6.1 需求
+
+每完成一个高级难度的扫雷游戏，可获得点亮（Illuminate）低级别世界地图格子的Credits。例如：
+- 完成 Master → Expert×1、Hard×2、Medium×3、Normal×5、Easy×8
+- 完成 Expert → Hard×1、Medium×2、Normal×3、Easy×5
+- 以此类推，Easy 完成无奖励
+
+获得 Credits 后，玩家可以进入 Illuminate Mode，选择点亮指定难度的未完成格子（标记为 Won 状态，无需实际游玩）。Credit 数量和兑换比例均可在 Admin 页面配置。同时将 Life 恢复时间也移至 Admin 可配置。
+
+---
+
+### v0.6.2 数据库（Migration 005）
+
+*新增表：*
+
+**`game_settings`**（key-value 配置表）
+- `key TEXT PRIMARY KEY`
+- `value TEXT NOT NULL`
+
+初始数据：
+- `life_regen_minutes = 15`
+- `illuminate_master = {"expert":1,"hard":2,"medium":3,"normal":5,"easy":8}`
+- `illuminate_expert = {"hard":1,"medium":2,"normal":3,"easy":5}`
+- `illuminate_hard = {"medium":1,"normal":2,"easy":3}`
+- `illuminate_medium = {"normal":1,"easy":2}`
+- `illuminate_normal = {"easy":1}`
+
+**`illuminate_credits`**（玩家各难度积分表）
+- `user_id UUID` + `tier TEXT` → 复合主键
+- `credits INT DEFAULT 0`
+
+---
+
+### v0.6.3 API（api/illuminate.js，第 11 个 Function）
+
+路由：`?action=`
+
+| Method | action | 说明 |
+|--------|--------|------|
+| GET | `settings` | 公开，返回 illuminateRatios + lifeRegenMinutes |
+| GET | `credits` | 需认证，返回当前用户各 tier 积分 |
+| POST | `award` | 需认证，赢得指定 tier 后发放积分（读 game_settings） |
+| POST | `spend` | 需认证，消耗 1 积分点亮指定格子 |
+
+**award 逻辑：** 读 `illuminate_{tier}` 设置 → 批量 upsert `illuminate_credits`（ON CONFLICT DO UPDATE credits + N）
+
+**spend 逻辑：** 先检查积分 → 检查格子非 won → 原子 `UPDATE ... WHERE credits > 0 RETURNING` → upsert `grid_states` as won
+
+---
+
+### v0.6.4 Admin 页面（admin_management.html）
+
+在用户管理表下方新增 **GAME SETTINGS** 区块：
+- Life Regen Time 输入框（分钟）
+- Illuminate Credits 配置表：行=来源难度，列=目标难度，单元格=数字输入框
+- **Save Settings** 按钮 → 批量 `PATCH /admin?resource=settings`
+
+`api/admin.js` 新增 `?resource=settings` 路由：
+- GET → 返回全部 `game_settings`
+- PATCH `{key, value}` → upsert
+
+---
+
+### v0.6.5 api/lives.js — 动态 REGEN_MS
+
+将原本硬编码的 `REGEN_MS = 15 * 60 * 1000` 改为从 `game_settings` 动态读取：
+
+```js
+async function getRegenMs(db) {
+  const r = await db.query("SELECT value FROM game_settings WHERE key='life_regen_minutes'");
+  return r.rows.length ? parseInt(r.rows[0].value) * 60000 : 900000;
+}
+```
+
+GET / POST 均调用 `getRegenMs(db)` 并将结果传给 `applyRegen` 和 `msUntilNextRegen`。
+
+---
+
+### v0.6.6 前端（index.html）
+
+*状态变量：*
+- `illuminateCredits`：`{ easy:N, normal:N, ... }` 或 `null`
+- `illuminateSettings`：`{ illuminateRatios, lifeRegenMinutes }` 或 `null`
+- `illuminateMode`：布尔值，是否处于点亮模式
+- `illuminatePromptData`：`{ gx, gy, tier }` 当前待确认的点亮操作
+
+*核心函数：*
+- `fetchIlluminateSettings()`：Boot 时调用，公开接口，无需登录
+- `fetchIlluminateCredits()`：登录后调用，获取用户积分
+- `updateCreditsDisplay()`：更新 HUD 积分显示和按钮可见性
+- `toggleIlluminateMode()`：切换点亮模式（无积分时禁用）
+- `showIlluminatePrompt(gx, gy, tier)`：弹出点亮确认框
+- `confirmIlluminate()`：`POST /illuminate?action=spend` → 本地标记 won → 更新积分显示
+- `awardIlluminateCredits(tierId)`：赢得游戏后调用，`POST /illuminate?action=award` → 更新积分 + Toast 提示
+
+*游戏世界视觉：*
+- Illuminate Mode 激活时，有积分可点亮的格子显示紫色脉冲光晕
+- 点击有积分的格子弹出确认框（拦截正常的 openGrid）
+
+*HUD 新增：*
+- `#hud-credits`：显示各 tier 积分（例：`Credits: E×3 H×2`）
+- `#hud-illuminate-btn`：✨ Illuminate Mode 切换按钮（有积分时才显示）
+
+*流程：*
+```
+handleWin(g)
+  ↓
+syncSave(g.gx, g.gy)
+  ↓
+awardIlluminateCredits(g.tier.id)   ← 自动发放积分
+  ↓ (后台异步，不阻塞 UI)
+POST /illuminate?action=award
+  ↓
+illuminateCredits 更新
+  ↓
+Toast "✨ Credits earned: X×N Y×M"
+```

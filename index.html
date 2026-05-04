@@ -88,6 +88,12 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #lp-hearts{font-size:26px;letter-spacing:5px;margin:10px 0 6px}
 #lp-sub{color:#778;font-size:12px;margin-bottom:18px}
 #lp-regen{font-size:11px;color:#3a2a2a;margin-top:12px;min-height:16px}
+#hud-credits{font-size:11px;margin-top:2px;color:#b090d8}
+#hud-illuminate-btn{margin-top:6px;padding:5px 10px;font-size:11px;background:#160830;border:1px solid #5030a0;color:#c090f0;border-radius:4px;cursor:pointer;width:100%;transition:background .12s,border-color .12s}
+#hud-illuminate-btn:hover{background:#221050}
+#hud-illuminate-btn.active{background:#380c90;border-color:#c090f0;color:#f0d0ff}
+#illuminate-prompt{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:200;background:rgba(0,0,0,.75)}
+#illuminate-box{background:#0e0820;border:1px solid #7040c0;border-radius:12px;padding:32px 28px;max-width:320px;width:90%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.8)}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
@@ -102,6 +108,8 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
     <div class="dim">Drag to pan &nbsp;·&nbsp; Scroll to zoom</div>
     <div id="hud-online" style="margin-top:4px"></div>
     <div id="hud-lives"></div>
+    <div id="hud-credits"></div>
+    <button id="hud-illuminate-btn" onclick="toggleIlluminateMode()" style="display:none">✨ Illuminate Mode</button>
     <div id="hud-legend" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 10px;max-width:220px"></div>
   </div>
   <div id="world-tooltip"><div class="tt-lbl" id="tt-label"></div><div class="tt-sub" id="tt-size"></div></div>
@@ -151,6 +159,19 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
       <button class="btn danger" onclick="declineLive()">Accept Loss</button>
     </div>
     <div id="lp-regen"></div>
+  </div>
+</div>
+
+<!-- ── Illuminate Prompt ─────────────────────────────────────────────── -->
+<div id="illuminate-prompt">
+  <div id="illuminate-box">
+    <div style="font-size:28px;margin-bottom:6px">✨</div>
+    <div style="font-size:19px;font-weight:bold;color:#c090f0;margin-bottom:14px">Illuminate Grid</div>
+    <div id="ip-info" style="color:#998;font-size:13px;margin-bottom:18px"></div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button id="ip-confirm-btn" class="btn" onclick="confirmIlluminate()" style="background:#1a0840;border-color:#8040d0;color:#d0a0ff">✨ Illuminate</button>
+      <button class="btn danger" onclick="cancelIlluminate()">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -289,6 +310,10 @@ let screen = 'world';
 let playerLives = null;     // null = not fetched; number = current lives
 let lifePromptGrid = null;  // grid state pending life-prompt decision
 let livesRegenTO = null;
+let illuminateCredits = null;   // { easy:0, normal:0, ... } or null
+let illuminateSettings = null;  // { illuminateRatios, lifeRegenMinutes }
+let illuminateMode = false;
+let illuminatePromptData = null; // { gx, gy, tier } pending illuminate
 let lastActiveKey = null;   // most recently visited active game
 let viewKey = null;
 
@@ -471,6 +496,14 @@ function drawWorld() {
       ctx.fillRect(sx,sy,tw,th);
       const bw=Math.max(1,Math.round(tw*0.07));
       ctx.strokeStyle=`rgba(255,255,255,${0.35+0.4*pulse})`;
+      ctx.lineWidth=bw;
+      ctx.strokeRect(sx+bw/2,sy+bw/2,tw-bw,th-bw);
+    }
+    if (illuminateMode && st!=='won' && hasCreditsForTier(tier.id)) {
+      ctx.fillStyle=`rgba(150,80,255,${0.18+0.16*pulse})`;
+      ctx.fillRect(sx,sy,tw,th);
+      const bw=Math.max(1,Math.round(tw*0.09));
+      ctx.strokeStyle=`rgba(200,130,255,${0.55+0.35*pulse})`;
       ctx.lineWidth=bw;
       ctx.strokeRect(sx+bw/2,sy+bw/2,tw-bw,th-bw);
     }
@@ -816,6 +849,116 @@ function declineLive() {
   if (g) { commitLoss(g); syncSave(g.gx, g.gy); }
 }
 
+// ── Illuminate System ──────────────────────────────────────────────────────
+async function fetchIlluminateSettings() {
+  try {
+    illuminateSettings = await apiFetch('/illuminate?action=settings');
+  } catch { illuminateSettings = null; }
+}
+
+async function fetchIlluminateCredits() {
+  if (!Auth.isLoggedIn()) { illuminateCredits = null; updateCreditsDisplay(); return; }
+  try {
+    const data = await apiFetch('/illuminate?action=credits');
+    illuminateCredits = data.credits;
+    updateCreditsDisplay();
+  } catch { illuminateCredits = null; updateCreditsDisplay(); }
+}
+
+function totalCredits() {
+  if (!illuminateCredits) return 0;
+  return Object.values(illuminateCredits).reduce((s, v) => s + v, 0);
+}
+
+function hasCreditsForTier(tierId) {
+  return (illuminateCredits?.[tierId] ?? 0) > 0;
+}
+
+function updateCreditsDisplay() {
+  const el  = document.getElementById('hud-credits');
+  const btn = document.getElementById('hud-illuminate-btn');
+  if (!Auth.isLoggedIn() || !illuminateCredits) {
+    if (el)  el.textContent = '';
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+  const total = totalCredits();
+  const parts = Object.entries(illuminateCredits)
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => `${k.charAt(0).toUpperCase()}×${v}`);
+  if (el)  el.textContent = parts.length ? 'Credits: ' + parts.join(' ') : '';
+  if (btn) btn.style.display = total > 0 ? '' : 'none';
+  if (!total && illuminateMode) {
+    illuminateMode = false;
+    if (btn) btn.classList.remove('active');
+  }
+}
+
+function toggleIlluminateMode() {
+  if (!Auth.isLoggedIn() || totalCredits() === 0) return;
+  illuminateMode = !illuminateMode;
+  const btn = document.getElementById('hud-illuminate-btn');
+  if (btn) btn.classList.toggle('active', illuminateMode);
+}
+
+function showIlluminatePrompt(gx, gy, tier) {
+  illuminatePromptData = { gx, gy, tier };
+  const credits = illuminateCredits?.[tier.id] ?? 0;
+  document.getElementById('ip-info').innerHTML =
+    `Spend 1 <span style="color:${tier.border}">${tier.label}</span> credit to illuminate grid (${gx}, ${gy}).<br>` +
+    `<span style="color:#665;font-size:11px">You have ${credits} credit${credits !== 1 ? 's' : ''}</span>`;
+  const btn = document.getElementById('ip-confirm-btn');
+  btn.disabled = false; btn.textContent = '✨ Illuminate';
+  document.getElementById('illuminate-prompt').style.display = 'flex';
+}
+
+function cancelIlluminate() {
+  illuminatePromptData = null;
+  document.getElementById('illuminate-prompt').style.display = 'none';
+}
+
+async function confirmIlluminate() {
+  if (!illuminatePromptData) return;
+  const btn = document.getElementById('ip-confirm-btn');
+  btn.disabled = true; btn.textContent = '…';
+  const { gx, gy, tier } = illuminatePromptData;
+  try {
+    const data = await apiFetch('/illuminate?action=spend', {
+      method: 'POST',
+      body: JSON.stringify({ tier: tier.id, gx, gy }),
+    });
+    illuminateCredits = data.credits;
+    const g = ensureGrid(gx, gy);
+    g.status = 'won';
+    illuminatePromptData = null;
+    document.getElementById('illuminate-prompt').style.display = 'none';
+    updateCreditsDisplay();
+    showToast('✨ Grid illuminated!');
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '✨ Illuminate';
+    showToast(e.message || 'Failed to illuminate');
+  }
+}
+
+async function awardIlluminateCredits(tierId) {
+  if (!Auth.isLoggedIn()) return;
+  if (!illuminateSettings?.illuminateRatios?.[tierId]) return;
+  try {
+    const data = await apiFetch('/illuminate?action=award', {
+      method: 'POST',
+      body: JSON.stringify({ tier: tierId }),
+    });
+    if (!data.awarded || !Object.values(data.awarded).some(n => n > 0)) return;
+    illuminateCredits = data.credits;
+    updateCreditsDisplay();
+    const parts = Object.entries(data.awarded)
+      .filter(([, n]) => n > 0)
+      .map(([t, n]) => `${t.charAt(0).toUpperCase()}×${n}`)
+      .join(' ');
+    if (parts) showToast(`✨ Credits earned: ${parts}`);
+  } catch {}
+}
+
 function restartCurrentGrid() {
   if (!viewKey) return;
   const g=store.get(viewKey); if (!g) return;
@@ -1020,6 +1163,7 @@ const Auth = {
     this._access = this._refresh = this.username = this.userId = null;
     this.role = 'user';
     playerLives = null; updateLivesDisplay();
+    illuminateCredits = null; illuminateMode = false; updateCreditsDisplay();
     localStorage.removeItem('msw_refresh');
     localStorage.removeItem('msw_username');
     localStorage.removeItem('msw_userId');
@@ -1171,6 +1315,7 @@ const _handleWin = handleWin;
 window.handleWin = function(g) {
   _handleWin(g);
   syncSave(g.gx, g.gy);
+  awardIlluminateCredits(g.tier.id);
 };
 const _handleLose = handleLose;
 window.handleLose = function(g, r, c) {
@@ -1192,6 +1337,15 @@ window.restartCurrentGrid = function() {
 // Patch openGrid to notify WS of grid entry
 const _openGrid = openGrid;
 window.openGrid = function(gx, gy) {
+  if (illuminateMode) {
+    const tier = gridTier(gx, gy);
+    if (!tier) return;
+    const g = store.get(gKey(gx, gy));
+    if ((!g || g.status !== 'won') && hasCreditsForTier(tier.id)) {
+      showIlluminatePrompt(gx, gy, tier);
+    }
+    return;
+  }
   _openGrid(gx, gy);
   wsClient.enterGrid(gx, gy);
 };
@@ -1373,6 +1527,7 @@ async function submitAuth() {
     hideAuth();
     await syncLoadAll();      // pull server progress into local store
     fetchLives();
+    fetchIlluminateCredits();
     wsClient.connect();
   } catch (e) {
     errEl.textContent = e.status === 409 ? 'Username already taken'
@@ -1453,6 +1608,7 @@ async function handleOAuthCallback() {
     Auth.setTokens(data);
     await syncLoadAll();
     fetchLives();
+    fetchIlluminateCredits();
     wsClient.connect();
   } catch (e) {
     console.error('[oauth] callback error:', e);
@@ -1463,9 +1619,11 @@ async function handleOAuthCallback() {
 // ── Boot ───────────────────────────────────────────────────────────────────
 updateAuthHUD();
 fetchActiveWorldMap(); // always fetch — world map is public
+fetchIlluminateSettings(); // public endpoint
 if (Auth.isLoggedIn()) {
   syncLoadAll();
   fetchLives();
+  fetchIlluminateCredits();
   wsClient.connect();
 } else {
   wsClient.connect();

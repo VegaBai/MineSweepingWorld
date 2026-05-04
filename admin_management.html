@@ -63,6 +63,25 @@ td.date{color:#334;font-size:11px}
 .save-btn:disabled{opacity:.4;cursor:default}
 .save-btn.saved{color:#6aaa6a;border-color:#2a5a2a}
 
+/* ── Settings section ── */
+.section-hdr{font-size:11px;color:#446;letter-spacing:.8px;margin:32px 0 14px;padding-bottom:8px;border-bottom:1px solid #1a2a4a}
+#settings-wrap{background:#080e22;border:1px solid #1a2a4a;border-radius:8px;padding:22px 24px;margin-top:4px}
+.settings-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.settings-row label{font-size:12px;color:#7a9ab8;min-width:200px}
+.settings-num{background:#0a1220;border:1px solid #1a2a4a;border-radius:4px;padding:5px 8px;color:#c8d8f0;font-family:inherit;font-size:13px;outline:none;width:80px;text-align:right}
+.settings-num:focus{border-color:#2a5aaa}
+#illuminate-table{border-collapse:collapse;font-size:12px;margin-top:14px}
+#illuminate-table th{background:#0a1428;padding:7px 12px;text-align:center;font-size:10px;color:#446;letter-spacing:.5px;font-weight:normal;border-bottom:1px solid #1a2a4a}
+#illuminate-table th:first-child{text-align:left;min-width:80px}
+#illuminate-table td{padding:6px 12px;border-bottom:1px solid #0e1a30;text-align:center}
+#illuminate-table td:first-child{text-align:left;color:#8ab}
+#illuminate-table td.dash{color:#223}
+.ill-input{background:#0a1220;border:1px solid #1a2a4a;border-radius:3px;padding:3px 6px;color:#c8d8f0;font-family:inherit;font-size:12px;outline:none;width:48px;text-align:center}
+.ill-input:focus{border-color:#2a5aaa}
+#settings-save-btn{margin-top:16px;background:#0e1e3a;color:#6a9ada;border:1px solid #1e3a6a;padding:7px 20px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:13px;transition:background .12s}
+#settings-save-btn:hover{background:#1c2d54}
+#settings-save-btn.saved{color:#6aaa6a;border-color:#2a5a2a}
+
 /* ── Access denied ── */
 #denied{display:none;text-align:center;padding:80px 20px}
 #denied h2{font-size:24px;color:#f88;margin-bottom:12px}
@@ -123,6 +142,28 @@ td.date{color:#334;font-size:11px}
       <tbody id="tbody"></tbody>
     </table>
     <div id="loading">Loading users…</div>
+  </div>
+
+  <div class="section-hdr">GAME SETTINGS</div>
+  <div id="settings-wrap">
+    <div class="settings-row">
+      <label>Life Regen Time</label>
+      <input id="life-regen-input" type="number" class="settings-num" min="1" max="1440" value="15">
+      <span style="font-size:12px;color:#446">minutes</span>
+    </div>
+    <div style="margin-top:18px;font-size:11px;color:#446;letter-spacing:.5px;margin-bottom:8px">ILLUMINATE CREDITS (winning tier → credits awarded for lower tiers)</div>
+    <table id="illuminate-table">
+      <thead>
+        <tr>
+          <th>Win ↓</th>
+          <th>EXPERT</th><th>HARD</th><th>MEDIUM</th><th>NORMAL</th><th>EASY</th>
+        </tr>
+      </thead>
+      <tbody id="illuminate-tbody">
+        <!-- populated by JS -->
+      </tbody>
+    </table>
+    <button id="settings-save-btn" onclick="saveSettings()">Save Settings</button>
   </div>
 </div>
 
@@ -276,6 +317,77 @@ function loadStats() {
   document.getElementById('cnt-admin').textContent      = counts.admin;
 }
 
+// ── Settings ───────────────────────────────────────────────────────────────
+const ILLUMINATE_SOURCES = ['master', 'expert', 'hard', 'medium', 'normal'];
+const ILLUMINATE_TARGETS = ['expert', 'hard', 'medium', 'normal', 'easy'];
+// Allowed targets per source (only lower tiers)
+const ALLOWED_TARGETS = {
+  master: ['expert','hard','medium','normal','easy'],
+  expert: ['hard','medium','normal','easy'],
+  hard:   ['medium','normal','easy'],
+  medium: ['normal','easy'],
+  normal: ['easy'],
+};
+
+let currentSettings = {};
+
+function renderIlluminateTable(settings) {
+  const tbody = document.getElementById('illuminate-tbody');
+  tbody.innerHTML = ILLUMINATE_SOURCES.map(src => {
+    const rawRatios = settings[`illuminate_${src}`] ? JSON.parse(settings[`illuminate_${src}`]) : {};
+    const cells = ILLUMINATE_TARGETS.map(tgt => {
+      if (!ALLOWED_TARGETS[src].includes(tgt)) {
+        return `<td class="dash">—</td>`;
+      }
+      const val = rawRatios[tgt] ?? 0;
+      return `<td><input type="number" class="ill-input" min="0" max="99" data-src="${src}" data-tgt="${tgt}" value="${val}"></td>`;
+    }).join('');
+    return `<tr><td>${src.charAt(0).toUpperCase() + src.slice(1)}</td>${cells}</tr>`;
+  }).join('');
+}
+
+async function loadSettings() {
+  try {
+    const data = await apiFetch('/admin?resource=settings');
+    currentSettings = data.settings ?? {};
+    const regenVal = currentSettings['life_regen_minutes'] ?? '15';
+    document.getElementById('life-regen-input').value = regenVal;
+    renderIlluminateTable(currentSettings);
+  } catch {}
+}
+
+async function saveSettings() {
+  const btn = document.getElementById('settings-save-btn');
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const lifeRegen = document.getElementById('life-regen-input').value;
+    await apiFetch('/admin?resource=settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ key: 'life_regen_minutes', value: lifeRegen }),
+    });
+
+    // Collect illuminate ratios from inputs
+    const ratioMap = {};
+    document.querySelectorAll('.ill-input').forEach(inp => {
+      const src = inp.dataset.src, tgt = inp.dataset.tgt;
+      if (!ratioMap[src]) ratioMap[src] = {};
+      ratioMap[src][tgt] = parseInt(inp.value) || 0;
+    });
+    for (const [src, ratios] of Object.entries(ratioMap)) {
+      await apiFetch('/admin?resource=settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ key: `illuminate_${src}`, value: JSON.stringify(ratios) }),
+      });
+    }
+    btn.textContent = '✓ Saved';
+    btn.className = 'save-btn saved';
+    setTimeout(() => { btn.className = ''; btn.disabled = false; btn.textContent = 'Save Settings'; }, 2000);
+  } catch (e) {
+    btn.textContent = '✗ Error: ' + e.message;
+    btn.disabled = false;
+  }
+}
+
 // ── Boot ───────────────────────────────────────────────────────────────────
 (async () => {
   // Show user in header
@@ -292,6 +404,7 @@ function loadStats() {
     document.getElementById('main').style.display    = '';
     loadStats();
     renderTable();
+    loadSettings(); // load game settings in parallel (best-effort)
   } catch (e) {
     if (e.status === 401 || e.status === 403) {
       document.getElementById('denied').style.display = '';
