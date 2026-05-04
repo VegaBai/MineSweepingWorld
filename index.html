@@ -9,6 +9,7 @@
 body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monospace;overflow:hidden;width:100vw;height:100vh;user-select:none}
 #world-screen{position:fixed;inset:0}
 #world-canvas{width:100%;height:100%;cursor:grab;display:block}
+#world-canvas.illuminate{cursor:pointer}
 #world-canvas.dragging{cursor:grabbing}
 #world-hud{position:fixed;top:12px;left:12px;background:rgba(8,14,34,.9);border:1px solid #1a2a4a;border-radius:6px;padding:8px 14px;font-size:12px;line-height:1.9;pointer-events:none;backdrop-filter:blur(4px)}
 #world-hud .dim{color:#334}
@@ -891,6 +892,7 @@ function updateCreditsDisplay() {
   if (!total && illuminateMode) {
     illuminateMode = false;
     if (btn) btn.classList.remove('active');
+    wCvs.classList.remove('illuminate');
   }
 }
 
@@ -899,6 +901,7 @@ function toggleIlluminateMode() {
   illuminateMode = !illuminateMode;
   const btn = document.getElementById('hud-illuminate-btn');
   if (btn) btn.classList.toggle('active', illuminateMode);
+  wCvs.classList.toggle('illuminate', illuminateMode);
 }
 
 function showIlluminatePrompt(gx, gy, tier) {
@@ -1163,7 +1166,7 @@ const Auth = {
     this._access = this._refresh = this.username = this.userId = null;
     this.role = 'user';
     playerLives = null; updateLivesDisplay();
-    illuminateCredits = null; illuminateMode = false; updateCreditsDisplay();
+    illuminateCredits = null; illuminateMode = false; wCvs.classList.remove('illuminate'); updateCreditsDisplay();
     localStorage.removeItem('msw_refresh');
     localStorage.removeItem('msw_username');
     localStorage.removeItem('msw_userId');
