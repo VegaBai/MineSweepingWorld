@@ -202,8 +202,7 @@ const Auth = {
   get role()     { return localStorage.getItem('msw_role'); },
 };
 
-async function getAccessToken() {
-  if (Auth.token) return Auth.token;
+async function refreshAccessToken() {
   if (!Auth.refresh) return null;
   const r = await fetch(`${API_BASE}/auth?action=refresh`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -215,11 +214,30 @@ async function getAccessToken() {
   return accessToken;
 }
 
+async function getAccessToken() {
+  if (Auth.token) {
+    try {
+      const exp = JSON.parse(atob(Auth.token.split('.')[1])).exp;
+      if (exp * 1000 > Date.now() + 10_000) return Auth.token;
+    } catch {}
+    localStorage.removeItem('msw_access');
+  }
+  return refreshAccessToken();
+}
+
 async function apiFetch(path, opts = {}) {
-  const token = await getAccessToken();
-  const headers = { 'Content-Type': 'application/json', ...(opts.headers ?? {}) };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  let token = await getAccessToken();
+  const doFetch = (tok) => {
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers ?? {}) };
+    if (tok) headers['Authorization'] = `Bearer ${tok}`;
+    return fetch(`${API_BASE}${path}`, { ...opts, headers });
+  };
+  let res = await doFetch(token);
+  if (res.status === 401) {
+    localStorage.removeItem('msw_access');
+    token = await refreshAccessToken();
+    res = await doFetch(token);
+  }
   if (!res.ok) {
     const err = Object.assign(new Error(res.statusText), { status: res.status });
     throw err;
