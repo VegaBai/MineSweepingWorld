@@ -502,6 +502,16 @@ function drawWorld() {
       ctx.lineWidth=bw;
       ctx.strokeRect(sx+bw/2,sy+bw/2,tw-bw,th-bw);
     }
+    if (st==='lost' && tw>=10) {
+      ctx.save();
+      ctx.globalAlpha=0.40;
+      ctx.fillStyle='#ffffff';
+      ctx.font=`${Math.round(tw*0.62)}px sans-serif`;
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText('↺',sx+tw/2,sy+th/2);
+      ctx.restore();
+    }
     if (illuminateMode && st!=='won' && hasCreditsForTier(tier.id)) {
       ctx.fillStyle=`rgba(150,80,255,${0.18+0.16*pulse})`;
       ctx.fillRect(sx,sy,tw,th);
