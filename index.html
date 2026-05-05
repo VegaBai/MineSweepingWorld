@@ -112,7 +112,7 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
   <div id="world-hud">
     <div id="hud-pos">Center: (50, 50)</div>
     <div id="hud-zoom">Zoom: 1.00×</div>
-    <div id="hud-countdown" style="font-size:10px;color:#6a8aaa"></div>
+    <div id="hud-countdown" style="font-size:18px;font-weight:bold;color:#aaccee;letter-spacing:.5px;margin-bottom:2px"></div>
     <div class="dim" id="hud-hint">Click any grid to start a game</div>
     <div class="dim">Drag to pan &nbsp;·&nbsp; Scroll to zoom</div>
     <div id="hud-online" style="margin-top:4px"></div>
@@ -332,6 +332,8 @@ let screen = 'world';
 let playerLives = null;     // null = not fetched; number = current lives
 let lifePromptGrid = null;  // grid state pending life-prompt decision
 let livesRegenTO = null;
+let livesRegenAt = null;     // absolute ms timestamp of next regen
+let livesCountdownIV = null; // setInterval handle for countdown display
 let illuminateCredits = null;   // { easy:0, normal:0, ... } or null
 let illuminateSettings = null;  // { illuminateRatios, lifeRegenMinutes }
 let illuminateMode = false;
@@ -809,6 +811,15 @@ function heartsHtml(lives, max=3) {
          '<span class="lheart empty">♡</span>'.repeat(max - lives);
 }
 
+function regenCdHtml() {
+  if (playerLives >= 3 || !livesRegenAt) return '';
+  const ms = livesRegenAt - Date.now();
+  if (ms <= 0) return '';
+  const m = Math.floor(ms / 60000), s = Math.floor((ms % 60000) / 1000);
+  const ts = `${m}:${String(s).padStart(2,'0')}`;
+  return `<span id="lives-regen-cd" style="font-size:10px;color:#5a7888;margin-left:4px">${ts}</span>`;
+}
+
 function updateLivesDisplay() {
   const el   = document.getElementById('hdr-lives');
   const hud  = document.getElementById('hud-lives');
@@ -819,8 +830,26 @@ function updateLivesDisplay() {
     return;
   }
   if (wrap) wrap.style.display = 'flex';
-  if (el)   el.innerHTML = heartsHtml(playerLives);
-  if (hud)  hud.innerHTML = 'Lives: ' + heartsHtml(playerLives);
+  if (el)   el.innerHTML = heartsHtml(playerLives) + regenCdHtml();
+  if (hud)  hud.innerHTML = 'Lives: ' + heartsHtml(playerLives) + regenCdHtml();
+}
+
+function tickLivesCountdown() {
+  if (!livesRegenAt || playerLives >= 3) return;
+  const ms = livesRegenAt - Date.now();
+  if (ms <= 0) { clearInterval(livesCountdownIV); livesCountdownIV = null; return; }
+  const m = Math.floor(ms / 60000), s = Math.floor((ms % 60000) / 1000);
+  const ts = `${m}:${String(s).padStart(2,'0')}`;
+  const html = `<span id="lives-regen-cd" style="font-size:10px;color:#5a7888;margin-left:4px">${ts}</span>`;
+  const hud = document.getElementById('hud-lives');
+  const el  = document.getElementById('hdr-lives');
+  // Only update the countdown span; leave hearts intact
+  const hudCd = hud?.querySelector('#lives-regen-cd');
+  const elCd  = el?.querySelector('#lives-regen-cd');
+  if (hudCd) hudCd.outerHTML = html;
+  else if (hud && hud.textContent) hud.innerHTML += html;
+  if (elCd)  elCd.outerHTML  = html;
+  else if (el && el.textContent) el.innerHTML  += html;
 }
 
 async function fetchLives() {
@@ -835,8 +864,12 @@ async function fetchLives() {
 
 function scheduleRegenRefetch(nextRegenIn) {
   clearTimeout(livesRegenTO);
-  if (nextRegenIn == null) return; // already full
+  clearInterval(livesCountdownIV);
+  livesCountdownIV = null;
+  if (nextRegenIn == null) { livesRegenAt = null; return; } // already full
+  livesRegenAt = Date.now() + nextRegenIn;
   livesRegenTO = setTimeout(fetchLives, nextRegenIn + 1000);
+  livesCountdownIV = setInterval(tickLivesCountdown, 1000);
 }
 
 function showLifePrompt(g) {
@@ -1265,7 +1298,7 @@ const Auth = {
   clear() {
     this._access = this._refresh = this.username = this.userId = null;
     this.role = 'user';
-    playerLives = null; updateLivesDisplay();
+    playerLives = null; livesRegenAt = null; clearInterval(livesCountdownIV); livesCountdownIV = null; updateLivesDisplay();
     illuminateCredits = null; illuminateMode = false; wCvs.classList.remove('illuminate'); updateCreditsDisplay();
     localStorage.removeItem('msw_refresh');
     localStorage.removeItem('msw_username');
