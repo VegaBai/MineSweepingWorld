@@ -109,7 +109,11 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
       <input type="file" id="img-file" accept="image/*" onchange="onFileSelect(event)">
       <img id="img-preview">
       <div style="margin-top:10px">
-        <div class="field">
+        <label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="pixel-art-mode" onchange="togglePixelArtMode()">
+          像素图模式（按原始像素读取，忽略 Max Side）
+        </label>
+        <div class="field" id="max-side-field">
           <label>MAX SIDE (CELLS)</label>
           <input type="number" id="max-side" value="20" min="4" max="80">
         </div>
@@ -388,20 +392,33 @@ function loadImageFile(file) {
   img.src = url;
 }
 
+function togglePixelArtMode() {
+  const on = document.getElementById('pixel-art-mode').checked;
+  document.getElementById('max-side-field').style.display = on ? 'none' : '';
+}
+
 function generateMap() {
   if (!imageLoaded) return;
-  const maxSide = parseInt(document.getElementById('max-side').value) || 20;
+  const pixelArt = document.getElementById('pixel-art-mode').checked;
 
-  // Scale image to fit within maxSide
   let sw = imageLoaded.naturalWidth, sh = imageLoaded.naturalHeight;
-  const scale = Math.min(maxSide / sw, maxSide / sh, 1);
-  const w = Math.max(1, Math.round(sw * scale));
-  const h = Math.max(1, Math.round(sh * scale));
+  let w, h;
 
-  // Draw to offscreen canvas at grid resolution
+  if (pixelArt) {
+    // Use original pixel dimensions directly — each source pixel = one grid cell
+    w = sw; h = sh;
+  } else {
+    const maxSide = parseInt(document.getElementById('max-side').value) || 20;
+    const scale = Math.min(maxSide / sw, maxSide / sh, 1);
+    w = Math.max(1, Math.round(sw * scale));
+    h = Math.max(1, Math.round(sh * scale));
+  }
+
+  // Draw to offscreen canvas at grid resolution (no interpolation in pixel art mode)
   const off = document.createElement('canvas');
   off.width = w; off.height = h;
   const octx = off.getContext('2d');
+  if (pixelArt) octx.imageSmoothingEnabled = false;
   octx.drawImage(imageLoaded, 0, 0, w, h);
   const imgData = octx.getImageData(0, 0, w, h);
   const pixels = imgData.data; // RGBA flat
