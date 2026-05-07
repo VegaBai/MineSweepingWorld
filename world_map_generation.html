@@ -317,7 +317,11 @@ function resizeCanvas() {
 
 function drawGrid() {
   if (!gridData) return;
-  // Reference image underlay
+
+  // Always clear first — background cells (v===0) stay transparent
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Reference image underlay (drawn before cells)
   if (refImg.show && imageLoaded) {
     ctx.save();
     ctx.globalAlpha = refImg.opacity / 100;
@@ -329,19 +333,19 @@ function drawGrid() {
     );
     ctx.restore();
   }
-  // Grid cells (semi-transparent fill so reference shows through)
-  const cellAlpha = refImg.show ? 0.55 : 1;
+
+  // Draw only non-background cells; v===0 stays transparent in all modes
   for (let y = 0; y < gridH; y++) {
     for (let x = 0; x < gridW; x++) {
       const v = gridData[y * gridW + x];
-      ctx.globalAlpha = cellAlpha;
+      if (v === 0) continue;
       ctx.fillStyle = PALETTE[v].color;
       ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
     }
   }
-  ctx.globalAlpha = 1;
+
   // Grid lines
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
   ctx.lineWidth = 0.5;
   for (let x = 0; x <= gridW; x++) {
     ctx.beginPath(); ctx.moveTo(x * cellSize, 0); ctx.lineTo(x * cellSize, gridH * cellSize); ctx.stroke();
@@ -355,11 +359,16 @@ function paintCell(x, y) {
   if (!gridData || x < 0 || x >= gridW || y < 0 || y >= gridH) return;
   if (gridData[y * gridW + x] === selectedPal) return;
   gridData[y * gridW + x] = selectedPal;
-  ctx.fillStyle = PALETTE[selectedPal].color;
-  ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = 0.5;
-  ctx.strokeRect(x * cellSize + 0.5, y * cellSize + 0.5, cellSize - 1, cellSize - 1);
+  if (selectedPal === 0) {
+    // Erasing: clear cell and redraw reference image region if active
+    drawGrid();
+  } else {
+    ctx.fillStyle = PALETTE[selectedPal].color;
+    ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(x * cellSize + 0.5, y * cellSize + 0.5, cellSize - 1, cellSize - 1);
+  }
   updateStatusCounts();
 }
 
