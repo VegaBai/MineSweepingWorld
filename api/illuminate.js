@@ -36,18 +36,18 @@ export default async function handler(req, res) {
     const mapData = JSON.parse(data);
     const total = mapData.filter(v => v > 0).length; // non-background playable cells
     const r = await db.query(`
-      SELECT u.username, COUNT(*) AS won
+      SELECT COALESCE(u.display_name, u.username) AS name, COUNT(*) AS won
       FROM users u
       JOIN grid_states gs ON gs.user_id = u.id
       WHERE gs.status = 'won'
-      GROUP BY u.id, u.username
+      GROUP BY u.id, u.display_name, u.username
       ORDER BY won DESC
       LIMIT 8
     `);
     return res.json({
       total,
       rankings: r.rows.map(row => ({
-        username: row.username,
+        username: row.name,
         won: parseInt(row.won),
         pct: total > 0 ? Math.round(parseInt(row.won) / total * 1000) / 10 : 0,
       })),
