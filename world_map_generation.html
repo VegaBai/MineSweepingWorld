@@ -409,32 +409,39 @@ function togglePixelArtMode() {
   document.getElementById('max-side-field').style.display = on ? 'none' : '';
 }
 
-// Returns the pixel block size by computing GCD of all same-color run lengths
+// Detect pixel block size via voting on transition positions.
+// For each column x, count how many rows have a significant color change there.
+// Real pixel boundaries are agreed upon by many rows; compression artifacts are not.
 function detectPixelSize(pixels, w, h) {
-  const T = 25; // per-channel sum threshold for "same color"
-  function same(i, j) {
+  const DIFF_T = 30;   // sum of RGB diffs to count as a real transition
+  const VOTE_T = 0.25; // fraction of parallel lines that must agree
+
+  function diff(i, j) {
     return Math.abs(pixels[i*4]   - pixels[j*4])   +
            Math.abs(pixels[i*4+1] - pixels[j*4+1]) +
-           Math.abs(pixels[i*4+2] - pixels[j*4+2]) <= T;
+           Math.abs(pixels[i*4+2] - pixels[j*4+2]);
   }
   function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
+
+  // hVotes[x] = number of rows with a significant transition at column x
+  const hVotes = new Array(w).fill(0);
+  for (let y = 0; y < h; y++)
+    for (let x = 1; x < w; x++)
+      if (diff(y*w + x, y*w + x - 1) > DIFF_T) hVotes[x]++;
+
+  // vVotes[y] = number of columns with a significant transition at row y
+  const vVotes = new Array(h).fill(0);
+  for (let x = 0; x < w; x++)
+    for (let y = 1; y < h; y++)
+      if (diff(y*w + x, (y-1)*w + x) > DIFF_T) vVotes[y]++;
+
+  // GCD only over positions where enough lines agree (filters artifact transitions)
   let g = 0;
-  for (let y = 0; y < h; y++) {
-    let run = 1;
-    for (let x = 1; x < w; x++) {
-      if (same(y*w + x, y*w + x - 1)) { run++; }
-      else { g = gcd(g, run); run = 1; }
-    }
-    g = gcd(g, run);
-  }
-  for (let x = 0; x < w; x++) {
-    let run = 1;
-    for (let y = 1; y < h; y++) {
-      if (same(y*w + x, (y-1)*w + x)) { run++; }
-      else { g = gcd(g, run); run = 1; }
-    }
-    g = gcd(g, run);
-  }
+  for (let x = 1; x < w; x++)
+    if (hVotes[x] >= h * VOTE_T) g = gcd(g, x);
+  for (let y = 1; y < h; y++)
+    if (vVotes[y] >= w * VOTE_T) g = gcd(g, y);
+
   return Math.max(1, g);
 }
 
