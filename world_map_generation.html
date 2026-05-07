@@ -109,10 +109,16 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
       <input type="file" id="img-file" accept="image/*" onchange="onFileSelect(event)">
       <img id="img-preview">
       <div style="margin-top:10px">
-        <label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;cursor:pointer">
+        <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:12px;cursor:pointer">
           <input type="checkbox" id="pixel-art-mode" onchange="togglePixelArtMode()">
           像素图模式（按原始像素读取，忽略 Max Side）
         </label>
+        <div id="pixel-art-opts" style="display:none;margin-bottom:8px">
+          <div class="field">
+            <label>最小像素块尺寸（px，过滤压缩噪点）</label>
+            <input type="number" id="min-pixel-size" value="3" min="1" max="50">
+          </div>
+        </div>
         <div class="field" id="max-side-field">
           <label>MAX SIDE (CELLS)</label>
           <input type="number" id="max-side" value="20" min="4" max="80">
@@ -407,41 +413,37 @@ function loadImageFile(file) {
 function togglePixelArtMode() {
   const on = document.getElementById('pixel-art-mode').checked;
   document.getElementById('max-side-field').style.display = on ? 'none' : '';
+  document.getElementById('pixel-art-opts').style.display = on ? '' : 'none';
 }
 
-// Detect pixel block size via voting on transition positions.
-// For each column x, count how many rows have a significant color change there.
-// Real pixel boundaries are agreed upon by many rows; compression artifacts are not.
-function detectPixelSize(pixels, w, h) {
-  const DIFF_T = 30;   // sum of RGB diffs to count as a real transition
-  const VOTE_T = 0.25; // fraction of parallel lines that must agree
-
-  function diff(i, j) {
+// Detect pixel block size: GCD of same-color run lengths, ignoring runs shorter than minBlockSize.
+// minBlockSize lets users filter out 1–2px compression artifacts manually.
+function detectPixelSize(pixels, w, h, minBlockSize) {
+  const T = 25;
+  function same(i, j) {
     return Math.abs(pixels[i*4]   - pixels[j*4])   +
            Math.abs(pixels[i*4+1] - pixels[j*4+1]) +
-           Math.abs(pixels[i*4+2] - pixels[j*4+2]);
+           Math.abs(pixels[i*4+2] - pixels[j*4+2]) <= T;
   }
   function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
 
-  // hVotes[x] = number of rows with a significant transition at column x
-  const hVotes = new Array(w).fill(0);
-  for (let y = 0; y < h; y++)
-    for (let x = 1; x < w; x++)
-      if (diff(y*w + x, y*w + x - 1) > DIFF_T) hVotes[x]++;
-
-  // vVotes[y] = number of columns with a significant transition at row y
-  const vVotes = new Array(h).fill(0);
-  for (let x = 0; x < w; x++)
-    for (let y = 1; y < h; y++)
-      if (diff(y*w + x, (y-1)*w + x) > DIFF_T) vVotes[y]++;
-
-  // GCD only over positions where enough lines agree (filters artifact transitions)
   let g = 0;
-  for (let x = 1; x < w; x++)
-    if (hVotes[x] >= h * VOTE_T) g = gcd(g, x);
-  for (let y = 1; y < h; y++)
-    if (vVotes[y] >= w * VOTE_T) g = gcd(g, y);
-
+  for (let y = 0; y < h; y++) {
+    let run = 1;
+    for (let x = 1; x < w; x++) {
+      if (same(y*w + x, y*w + x - 1)) { run++; }
+      else { if (run >= minBlockSize) g = gcd(g, run); run = 1; }
+    }
+    if (run >= minBlockSize) g = gcd(g, run);
+  }
+  for (let x = 0; x < w; x++) {
+    let run = 1;
+    for (let y = 1; y < h; y++) {
+      if (same(y*w + x, (y-1)*w + x)) { run++; }
+      else { if (run >= minBlockSize) g = gcd(g, run); run = 1; }
+    }
+    if (run >= minBlockSize) g = gcd(g, run);
+  }
   return Math.max(1, g);
 }
 
@@ -462,7 +464,8 @@ function generateMap() {
     const pixels = octx.getImageData(0, 0, sw, sh).data;
 
     // Find actual pixel block size (GCD of uniform-color run lengths)
-    const ps = detectPixelSize(pixels, sw, sh);
+    const minBlock = Math.max(1, parseInt(document.getElementById('min-pixel-size').value) || 3);
+    const ps = detectPixelSize(pixels, sw, sh, minBlock);
     w = Math.max(1, Math.floor(sw / ps));
     h = Math.max(1, Math.floor(sh / ps));
 
