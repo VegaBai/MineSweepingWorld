@@ -469,6 +469,16 @@ function resetRefImg() {
 function generateMap() {
   if (!imageLoaded) return;
 
+  // Reference mode: just create a blank grid — user will paint manually over the image overlay
+  if (document.getElementById('pixel-art-mode').checked) {
+    const sw = imageLoaded.naturalWidth, sh = imageLoaded.naturalHeight;
+    const maxSide = parseInt(document.getElementById('max-side').value) || 20;
+    const scale = Math.min(maxSide / sw, maxSide / sh, 1);
+    initGrid(Math.max(1, Math.round(sw * scale)), Math.max(1, Math.round(sh * scale)));
+    updateStatusCounts();
+    return;
+  }
+
   const sw = imageLoaded.naturalWidth, sh = imageLoaded.naturalHeight;
   const maxSide = parseInt(document.getElementById('max-side').value) || 20;
   const scale = Math.min(maxSide / sw, maxSide / sh, 1);
