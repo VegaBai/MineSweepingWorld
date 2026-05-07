@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profile — MineSweepingWorld</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monospace;min-height:100vh;padding:0}
+a{color:#6a9ada;text-decoration:none}
+a:hover{color:#aaccea}
+
+/* ── Header ── */
+#header{background:#080e22;border-bottom:1px solid #1a2a4a;padding:12px 28px;display:flex;align-items:center;gap:18px}
+#header h1{font-size:16px;font-weight:bold;color:#aaccee;letter-spacing:.5px;flex:1}
+.back{font-size:13px;color:#556;cursor:pointer;border:1px solid #1a2a4a;padding:5px 14px;border-radius:4px;background:#0a1220;transition:background .15s;font-family:inherit}
+.back:hover{background:#111c38;color:#8ab}
+#hdr-user{font-size:12px;color:#4a6a8a}
+
+/* ── Layout ── */
+#main{max-width:860px;margin:0 auto;padding:28px 24px}
+
+/* ── Profile hero ── */
+#profile-hero{display:flex;align-items:center;gap:24px;padding:24px 28px;background:#080e22;border:1px solid #1a2a4a;border-radius:8px;margin-bottom:0}
+#hero-avatar{font-size:64px;line-height:1;flex-shrink:0;width:80px;text-align:center}
+#hero-info{flex:1;min-width:0}
+#hero-display{font-size:22px;font-weight:bold;color:#aaccee;letter-spacing:.3px;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hero-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:#4a6a8a}
+#hero-username{color:#6a8aaa}
+.role-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:bold;letter-spacing:.3px}
+.role-badge.user{background:#1a2a3a;color:#6a8aaa}
+.role-badge.subscriber{background:#1a2e1a;color:#6aaa6a}
+.role-badge.premium{background:#2e2010;color:#c09030}
+.role-badge.admin{background:#2a1a3a;color:#aa6ac0}
+#hero-joined{color:#334;font-size:11px}
+
+/* ── Tabs ── */
+#tabs-bar{display:flex;gap:0;border-bottom:1px solid #1a2a4a;margin-bottom:0;background:#080e22;border-left:1px solid #1a2a4a;border-right:1px solid #1a2a4a}
+.tab-btn{padding:11px 24px;font-size:13px;font-family:inherit;background:none;border:none;border-bottom:2px solid transparent;color:#446;cursor:pointer;letter-spacing:.3px;transition:color .15s,border-color .15s}
+.tab-btn:hover{color:#8ab}
+.tab-btn.active{color:#aaccee;border-bottom-color:#4a8ada}
+
+/* ── Tab content ── */
+.tab-pane{display:none;padding:24px 0}
+.tab-pane.active{display:block}
+
+/* ── Shared panel ── */
+.panel{background:#080e22;border:1px solid #1a2a4a;border-radius:8px;padding:22px 24px;margin-bottom:18px}
+.panel-title{font-size:10px;color:#446;letter-spacing:.8px;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #1a2a4a}
+
+/* ── Buttons ── */
+.btn{background:#111c38;color:#8ab;border:1px solid #1e3050;padding:6px 14px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:13px;transition:background .12s}
+.btn:hover{background:#1c2d54;color:#ace}
+.btn.primary{background:#0e1e3a;color:#6a9ada;border:1px solid #1e3a6a;padding:8px 22px;font-size:13px}
+.btn.primary:hover{background:#1c2d54}
+.btn.primary:disabled{opacity:.4;cursor:default}
+
+/* ── Form fields ── */
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.field label{font-size:11px;color:#556;letter-spacing:.5px}
+.field input[type=text]{background:#0a1428;border:1px solid #1e3050;border-radius:4px;padding:8px 10px;color:#c8d8f0;font-family:inherit;font-size:14px;outline:none;width:100%;max-width:340px}
+.field input[type=text]:focus{border-color:#3a70c0}
+.field input[type=text][readonly]{color:#556;cursor:default;border-color:#0e1a30}
+.field-hint{font-size:11px;color:#334;margin-top:2px}
+
+/* ── Avatar picker ── */
+#avatar-grid{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+.av-btn{width:48px;height:48px;font-size:26px;background:#0a1220;border:2px solid #1a2a4a;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .12s,background .12s;line-height:1}
+.av-btn:hover{background:#111c38;border-color:#3a5a8a}
+.av-btn.selected{border-color:#c8d8f0;background:#111c38}
+
+/* ── Status text ── */
+#save-status{font-size:12px;min-height:18px;margin-top:8px}
+#save-status.ok{color:#6aaa6a}
+#save-status.err{color:#f88}
+
+/* ── Readonly section ── */
+.readonly-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:500px){.readonly-grid{grid-template-columns:1fr}}
+.ro-item{background:#0a1220;border:1px solid #0e1a30;border-radius:4px;padding:10px 14px}
+.ro-item .ro-label{font-size:10px;color:#334;letter-spacing:.5px;margin-bottom:4px}
+.ro-item .ro-value{font-size:13px;color:#7a9ab8}
+
+/* ── History cards ── */
+.week-card{background:#080e22;border:1px solid #1a2a4a;border-radius:8px;margin-bottom:14px;overflow:hidden}
+.week-card.current{border-color:#2a5a3a}
+.week-card-header{padding:13px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;transition:background .12s}
+.week-card-header:hover{background:#0a1428}
+.week-card.current .week-card-header{background:#071410;cursor:default}
+.week-card.current .week-card-header:hover{background:#071410}
+.wc-week{font-size:12px;font-weight:bold;color:#aaccee;flex:1}
+.wc-badge{font-size:10px;color:#4a8a5a;background:#0e2018;border:1px solid #1a4a2a;padding:2px 8px;border-radius:10px}
+.wc-toggle{font-size:14px;color:#334;transition:transform .2s;flex-shrink:0}
+.week-card.expanded .wc-toggle{transform:rotate(180deg)}
+.week-card-body{display:none;padding:14px 18px;border-top:1px solid #0e1a30}
+.week-card.expanded .week-card-body{display:block}
+.week-card.current .week-card-body{display:block;border-top:1px solid #1a3028}
+
+.tier-row{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:12px}
+.tier-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.tier-label{width:56px;flex-shrink:0;font-size:11px;letter-spacing:.3px}
+.tier-count{width:56px;color:#6a8aaa;flex-shrink:0;text-align:right}
+.tier-bar-wrap{flex:1;height:5px;background:#0a1020;border-radius:3px;overflow:hidden}
+.tier-bar{height:100%;border-radius:3px;transition:width .3s}
+.tier-pct{width:38px;text-align:right;color:#446;font-size:11px;flex-shrink:0}
+
+/* ── Empty state ── */
+.empty-state{text-align:center;padding:48px 24px;color:#334;font-size:14px}
+.empty-state .empty-icon{font-size:36px;margin-bottom:12px}
+
+/* ── Achievements ── */
+#stats-row{display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap}
+.stat-card{background:#080e22;border:1px solid #1a2a4a;border-radius:8px;padding:14px 20px;flex:1;min-width:120px}
+.stat-card .sc-label{font-size:10px;color:#446;letter-spacing:.6px;margin-bottom:6px}
+.stat-card .sc-value{font-size:26px;font-weight:bold;color:#aaccee}
+
+#ach-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:640px){#ach-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:380px){#ach-grid{grid-template-columns:1fr}}
+.ach-card{background:#080e22;border:1px solid #1a2a4a;border-radius:8px;padding:18px 16px;text-align:center;position:relative;transition:border-color .15s}
+.ach-card.earned{border-color:#2a4a6a}
+.ach-card.locked{opacity:.35;filter:grayscale(1)}
+.ach-icon{font-size:36px;margin-bottom:10px;line-height:1}
+.ach-title{font-size:12px;font-weight:bold;color:#aaccee;margin-bottom:5px;letter-spacing:.2px}
+.ach-desc{font-size:11px;color:#446;line-height:1.5}
+.ach-check{position:absolute;top:8px;right:10px;font-size:13px;color:#6aaa6a}
+.ach-lock{position:absolute;top:8px;right:10px;font-size:13px;color:#334}
+
+/* ── Loading / divider ── */
+.section-sep{border:none;border-top:1px solid #1a2a4a;margin:6px 0 22px}
+.loading-text{text-align:center;padding:40px;color:#334;font-size:14px}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <button class="back" onclick="location.href='/'">← Back to Game</button>
+  <h1>Player Profile</h1>
+  <span id="hdr-user"></span>
+</div>
+
+<div id="main">
+
+  <!-- Profile Hero -->
+  <div id="profile-hero">
+    <div id="hero-avatar">⬡</div>
+    <div id="hero-info">
+      <div id="hero-display">—</div>
+      <div id="hero-meta">
+        <span id="hero-username">@—</span>
+        <span id="hero-role-badge" class="role-badge user">user</span>
+        <span id="hero-joined">joined —</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs bar -->
+  <div id="tabs-bar">
+    <button class="tab-btn active" data-tab="settings" onclick="switchTab('settings')">设置</button>
+    <button class="tab-btn" data-tab="history" onclick="switchTab('history')">游玩记录</button>
+    <button class="tab-btn" data-tab="achievements" onclick="switchTab('achievements')">成就</button>
+  </div>
+
+  <!-- ── Tab: Settings ── -->
+  <div id="tab-settings" class="tab-pane active">
+
+    <div class="panel">
+      <div class="panel-title">AVATAR</div>
+      <div id="avatar-grid"></div>
+      <div class="field">
+        <label>DISPLAY NAME</label>
+        <input type="text" id="display-name-input" maxlength="20" placeholder="Your username">
+        <div class="field-hint">Max 20 characters. Shown on the leaderboard.</div>
+      </div>
+      <button class="btn primary" onclick="saveSettings()">保存设置</button>
+      <div id="save-status"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">ACCOUNT INFO</div>
+      <div class="readonly-grid">
+        <div class="ro-item">
+          <div class="ro-label">EMAIL</div>
+          <div class="ro-value" id="ro-email">—</div>
+        </div>
+        <div class="ro-item">
+          <div class="ro-label">JOINED</div>
+          <div class="ro-value" id="ro-joined">—</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Tab: History ── -->
+  <div id="tab-history" class="tab-pane">
+    <div id="history-content"><div class="loading-text">Loading history…</div></div>
+  </div>
+
+  <!-- ── Tab: Achievements ── -->
+  <div id="tab-achievements" class="tab-pane">
+    <div id="achievements-content"><div class="loading-text">Loading achievements…</div></div>
+  </div>
+
+</div>
+
+<script>
+const API_BASE = '';
+
+const AVATAR_MAP = {
+  default:'⬡', dragon:'🐉', fox:'🦊', panda:'🐼', star:'⭐',
+  moon:'🌙', fire:'🔥', gem:'💎', target:'🎯', wave:'🌊',
+  bolt:'⚡', clover:'🍀', game:'🎮'
+};
+
+const TIERS = [
+  { id:'easy',   label:'EASY',   color:'#f5ede0' },
+  { id:'normal', label:'NORMAL', color:'#cef5dc' },
+  { id:'medium', label:'MEDIUM', color:'#cce4fc' },
+  { id:'hard',   label:'HARD',   color:'#e8d0fc' },
+  { id:'expert', label:'EXPERT', color:'#fce0b8' },
+  { id:'master', label:'MASTER', color:'#fcc8c8' },
+];
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+const Auth = {
+  get token()    { return localStorage.getItem('msw_access'); },
+  get refresh()  { return localStorage.getItem('msw_refresh'); },
+  get username() { return localStorage.getItem('msw_username'); },
+  get role()     { return localStorage.getItem('msw_role'); },
+};
+
+async function refreshAccessToken() {
+  if (!Auth.refresh) return null;
+  const r = await fetch(`${API_BASE}/api/auth?action=refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: Auth.refresh }),
+  });
+  if (!r.ok) return null;
+  const { accessToken } = await r.json();
+  localStorage.setItem('msw_access', accessToken);
+  return accessToken;
+}
+
+async function getAccessToken() {
+  if (Auth.token) {
+    try {
+      const exp = JSON.parse(atob(Auth.token.split('.')[1])).exp;
+      if (exp * 1000 > Date.now() + 10_000) return Auth.token;
+    } catch {}
+    localStorage.removeItem('msw_access');
+  }
+  return refreshAccessToken();
+}
+
+async function apiFetch(path, opts = {}) {
+  let token = await getAccessToken();
+  const doFetch = (tok) => {
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers ?? {}) };
+    if (tok) headers['Authorization'] = `Bearer ${tok}`;
+    return fetch(`${API_BASE}${path}`, { ...opts, headers });
+  };
+  let res = await doFetch(token);
+  if (res.status === 401) {
+    localStorage.removeItem('msw_access');
+    token = await refreshAccessToken();
+    res = await doFetch(token);
+  }
+  if (!res.ok) {
+    const err = Object.assign(new Error(res.statusText), { status: res.status });
+    throw err;
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+// ── State ────────────────────────────────────────────────────────────────
+let selectedAvatar = 'default';
+const loadedTabs = new Set();
+
+// ── Avatar picker ─────────────────────────────────────────────────────────
+function buildAvatarGrid() {
+  const grid = document.getElementById('avatar-grid');
+  grid.innerHTML = Object.entries(AVATAR_MAP).map(([key, emoji]) =>
+    `<button class="av-btn${key === selectedAvatar ? ' selected' : ''}" data-key="${key}" onclick="selectAvatar('${key}')" title="${key}">${emoji}</button>`
+  ).join('');
+}
+
+function selectAvatar(key) {
+  selectedAvatar = key;
+  document.querySelectorAll('.av-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.key === key);
+  });
+}
+
+// ── Date helpers ──────────────────────────────────────────────────────────
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-CA');
+}
+
+function fmtWeekStart(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ── Profile ───────────────────────────────────────────────────────────────
+async function loadProfile() {
+  try {
+    const data = await apiFetch('/api/profile?resource=profile');
+    const p = data.profile ?? data;
+
+    // Hero section
+    const avatarKey = p.avatar && AVATAR_MAP[p.avatar] ? p.avatar : 'default';
+    selectedAvatar = avatarKey;
+    document.getElementById('hero-avatar').textContent = AVATAR_MAP[avatarKey];
+    document.getElementById('hero-display').textContent = p.display_name || p.username || Auth.username || '—';
+    document.getElementById('hero-username').textContent = '@' + (p.username || Auth.username || '—');
+
+    const roleBadge = document.getElementById('hero-role-badge');
+    const role = p.role || Auth.role || 'user';
+    roleBadge.textContent = role;
+    roleBadge.className = 'role-badge ' + role;
+
+    document.getElementById('hero-joined').textContent = 'joined ' + fmtDate(p.created_at);
+
+    // Settings form
+    const nameInput = document.getElementById('display-name-input');
+    nameInput.value = p.display_name || '';
+    nameInput.placeholder = p.username || Auth.username || 'Your username';
+
+    // Read-only fields
+    document.getElementById('ro-email').textContent = p.email || '—';
+    document.getElementById('ro-joined').textContent = fmtDate(p.created_at);
+
+    // Rebuild avatar grid with correct selection
+    buildAvatarGrid();
+  } catch (e) {
+    console.error('loadProfile error', e);
+  }
+}
+
+// ── Settings save ─────────────────────────────────────────────────────────
+async function saveSettings() {
+  const statusEl = document.getElementById('save-status');
+  const btn = document.querySelector('#tab-settings .btn.primary');
+  const displayName = document.getElementById('display-name-input').value.trim();
+
+  btn.disabled = true;
+  statusEl.textContent = '…';
+  statusEl.className = '';
+
+  try {
+    await apiFetch('/api/profile?resource=profile', {
+      method: 'PATCH',
+      body: JSON.stringify({ display_name: displayName, avatar: selectedAvatar }),
+    });
+
+    // Update hero immediately
+    const heroDisplay = document.getElementById('hero-display');
+    if (displayName) heroDisplay.textContent = displayName;
+    document.getElementById('hero-avatar').textContent = AVATAR_MAP[selectedAvatar] ?? AVATAR_MAP.default;
+
+    statusEl.textContent = '✓ 保存成功';
+    statusEl.className = 'ok';
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+  } catch (e) {
+    statusEl.textContent = '✗ ' + (e.message || '保存失败');
+    statusEl.className = 'err';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── History ───────────────────────────────────────────────────────────────
+async function loadHistory() {
+  const container = document.getElementById('history-content');
+  try {
+    const data = await apiFetch('/api/profile?resource=history');
+    const weeks = data.weeks ?? data ?? [];
+
+    if (!weeks.length) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div>No play history yet. Start a game to record your progress!</div>`;
+      return;
+    }
+
+    container.innerHTML = weeks.map((week, idx) => renderWeekCard(week, idx === 0)).join('');
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠</div>Failed to load history.</div>`;
+  }
+}
+
+function renderWeekCard(week, isCurrent) {
+  const tierRows = TIERS.map(tier => {
+    const stat = (week.tiers ?? {})[tier.id];
+    if (!stat) return '';
+    const won   = stat.won   ?? 0;
+    const total = stat.total ?? 0;
+    const pct   = total > 0 ? Math.round((won / total) * 100) : 0;
+    return `
+      <div class="tier-row">
+        <div class="tier-swatch" style="background:${tier.color}"></div>
+        <div class="tier-label" style="color:${tier.color}">${tier.label}</div>
+        <div class="tier-count">${won}/${total}</div>
+        <div class="tier-bar-wrap"><div class="tier-bar" style="width:${pct}%;background:${tier.color}"></div></div>
+        <div class="tier-pct">${pct}%</div>
+      </div>`;
+  }).join('');
+
+  const mapName   = week.map_name   || week.week_label || 'Week Map';
+  const weekStart = week.week_start || week.created_at;
+
+  if (isCurrent) {
+    return `
+      <div class="week-card current">
+        <div class="week-card-header">
+          <div class="wc-week">${mapName}</div>
+          <span class="wc-badge">CURRENT WEEK</span>
+          <span style="font-size:11px;color:#4a7a5a;margin-left:8px">${fmtWeekStart(weekStart)}</span>
+        </div>
+        <div class="week-card-body">${tierRows || '<div style="color:#334;font-size:12px">No games played this week yet.</div>'}</div>
+      </div>`;
+  }
+
+  const cardId = 'wc-' + (week.id ?? Math.random().toString(36).slice(2));
+  return `
+    <div class="week-card" id="${cardId}">
+      <div class="week-card-header" onclick="toggleWeekCard('${cardId}')">
+        <div class="wc-week">${mapName} <span style="font-size:11px;color:#334;font-weight:normal">· ${fmtWeekStart(weekStart)}</span></div>
+        <span class="wc-toggle">▼</span>
+      </div>
+      <div class="week-card-body">${tierRows || '<div style="color:#334;font-size:12px">No games recorded.</div>'}</div>
+    </div>`;
+}
+
+function toggleWeekCard(cardId) {
+  const card = document.getElementById(cardId);
+  if (card) card.classList.toggle('expanded');
+}
+
+// ── Achievements ──────────────────────────────────────────────────────────
+async function loadAchievements() {
+  const container = document.getElementById('achievements-content');
+  try {
+    const data = await apiFetch('/api/profile?resource=achievements');
+    const achievements = data.achievements ?? [];
+    const stats        = data.stats ?? {};
+
+    const totalWon    = stats.total_won          ?? 0;
+    const totalLost   = stats.total_lost         ?? 0;
+    const weeksPlayed = stats.participated_weeks ?? 0;
+    const bestRank    = stats.best_rank          ?? '—';
+
+    const statsHtml = `
+      <div id="stats-row">
+        <div class="stat-card"><div class="sc-label">TOTAL WON</div><div class="sc-value" style="color:#6aaa6a">${totalWon}</div></div>
+        <div class="stat-card"><div class="sc-label">TOTAL LOST</div><div class="sc-value" style="color:#f88">${totalLost}</div></div>
+        <div class="stat-card"><div class="sc-label">WEEKS PLAYED</div><div class="sc-value" style="color:#6a9ada">${weeksPlayed}</div></div>
+        <div class="stat-card"><div class="sc-label">BEST RANK</div><div class="sc-value" style="color:#c09030">${bestRank === 1 ? '#1' : bestRank !== '—' ? '#' + bestRank : '—'}</div></div>
+      </div>`;
+
+    if (!achievements.length) {
+      container.innerHTML = statsHtml + `<div class="empty-state"><div class="empty-icon">🏆</div>No achievements defined yet.</div>`;
+      return;
+    }
+
+    const cardsHtml = `<div id="ach-grid">${achievements.map(renderAchCard).join('')}</div>`;
+    container.innerHTML = statsHtml + cardsHtml;
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠</div>Failed to load achievements.</div>`;
+  }
+}
+
+function renderAchCard(ach) {
+  const earned = !!ach.earned_at;
+  const overlay = earned
+    ? `<div class="ach-check">✓</div>`
+    : `<div class="ach-lock">🔒</div>`;
+  return `
+    <div class="ach-card ${earned ? 'earned' : 'locked'}">
+      ${overlay}
+      <div class="ach-icon">${ach.icon || '🏅'}</div>
+      <div class="ach-title">${ach.title || '—'}</div>
+      <div class="ach-desc">${ach.description || ''}</div>
+    </div>`;
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === name);
+  });
+  document.querySelectorAll('.tab-pane').forEach(pane => {
+    pane.classList.toggle('active', pane.id === 'tab-' + name);
+  });
+
+  if (!loadedTabs.has(name)) {
+    loadedTabs.add(name);
+    if (name === 'history')      loadHistory();
+    if (name === 'achievements') loadAchievements();
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+(async () => {
+  if (!Auth.token && !Auth.refresh) {
+    location.href = '/';
+    return;
+  }
+
+  // Show username in header
+  if (Auth.username) {
+    document.getElementById('hdr-user').textContent = (AVATAR_MAP[localStorage.getItem('msw_avatar') || 'default'] || '⬡') + ' ' + Auth.username;
+  }
+
+  // Build avatar grid with default selection, then overwrite once profile loads
+  buildAvatarGrid();
+  loadedTabs.add('settings');
+
+  loadProfile();
+})();
+</script>
+</body>
+</html>

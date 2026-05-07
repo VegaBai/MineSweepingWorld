@@ -2,6 +2,7 @@
   "rewrites": [
     { "source": "/admin_management",    "destination": "/admin_management.html" },
     { "source": "/world_map_generation","destination": "/world_map_generation.html" },
+    { "source": "/user_profile",        "destination": "/user_profile.html" },
     { "source": "/((?!api/).*)",        "destination": "/index.html" }
   ]
 }

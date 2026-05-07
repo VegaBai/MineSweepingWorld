@@ -125,6 +125,10 @@ CREATE TABLE IF NOT EXISTS map_week_snapshots (
   lost    SMALLINT NOT NULL DEFAULT 0,
   PRIMARY KEY (map_id, user_id, tier)
 );
+
+-- Migration 007: user profile
+ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar       TEXT DEFAULT 'default';
 `;
 
 // One-time migration — protect with a secret header

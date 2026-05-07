@@ -69,6 +69,11 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #hud-divider{border:none;border-top:1px solid #1a2a4a;margin:6px 0}
 #login-btn{position:fixed;top:12px;right:12px;z-index:50;background:rgba(20,50,100,.9);border:1px solid #2a5aaa;border-radius:6px;padding:7px 16px;color:#aaccea;font-family:inherit;font-size:13px;cursor:pointer;pointer-events:auto;backdrop-filter:blur(4px);transition:background .15s,border-color .15s;white-space:nowrap}
 #login-btn:hover{background:rgba(30,70,150,.95);border-color:#4a8ada}
+#user-dropdown{position:fixed;top:46px;right:12px;z-index:60;background:#0a1228;border:1px solid #2a5aaa;border-radius:6px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.6);display:none;min-width:160px;pointer-events:auto}
+#user-dropdown a{display:block;padding:10px 16px;font-size:13px;font-family:'Consolas','Courier New',monospace;white-space:nowrap;cursor:pointer;text-decoration:none;transition:background .12s}
+#user-dropdown a:hover{background:#111c38}
+#user-dropdown .dd-profile{color:#aaccea;border-bottom:1px solid #1a2a4a}
+#user-dropdown .dd-logout{color:#f88}
 #leaderboard-panel{position:fixed;top:0;right:0;bottom:0;width:260px;background:rgba(6,10,26,.97);border-left:1px solid #1a2a4a;padding:16px 14px;transform:translateX(100%);transition:transform .25s;z-index:40;overflow-y:auto;display:flex;flex-direction:column;gap:0}
 #leaderboard-panel.open{transform:translateX(0)}
 #lb-title{font-size:13px;font-weight:bold;color:#8ab;letter-spacing:.5px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
@@ -209,6 +214,10 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 <!-- ── Top-right controls ────────────────────────────────────────────── -->
 <a id="admin-link" href="/admin_management" style="display:none;position:fixed;top:12px;right:210px;z-index:50;background:rgba(40,20,60,.9);border:1px solid #6a3aaa;border-radius:6px;padding:7px 14px;color:#c090e0;font-family:'Consolas','Courier New',monospace;font-size:13px;pointer-events:auto;backdrop-filter:blur(4px);white-space:nowrap">⬡ Admin</a>
 <button id="login-btn" onclick="showAuthOrProfile()">⬡ Login / Register</button>
+<div id="user-dropdown">
+  <a class="dd-profile" href="/user_profile">👤 个人主页</a>
+  <a class="dd-logout" onclick="doLogout()">🚪 退出</a>
+</div>
 
 <!-- ── Auth Modal ────────────────────────────────────────────────────── -->
 <div id="auth-overlay" style="position:fixed">
@@ -1637,14 +1646,18 @@ let authMode = 'login'; // 'login' | 'register'
 
 function showAuthOrProfile() {
   if (Auth.isLoggedIn()) {
-    if (confirm(`Logged in as ${Auth.username}\n\nLog out?`)) {
-      apiFetch('/auth?action=logout', { method: 'POST', body: JSON.stringify({ refreshToken: Auth._refresh }) })
-        .catch(() => {});
-      Auth.clear();
-    }
+    const dd = document.getElementById('user-dropdown');
+    dd.style.display = dd.style.display === 'none' ? '' : 'none';
   } else {
     showAuth('login');
   }
+}
+
+function doLogout() {
+  document.getElementById('user-dropdown').style.display = 'none';
+  apiFetch('/auth?action=logout', { method: 'POST', body: JSON.stringify({ refreshToken: Auth._refresh }) })
+    .catch(() => {});
+  Auth.clear();
 }
 
 function showAuth(mode = 'login') {
@@ -1706,9 +1719,10 @@ async function submitAuth() {
 function updateAuthHUD() {
   const el = document.getElementById('login-btn');
   if (Auth.isLoggedIn()) {
-    el.textContent = `⬡ ${Auth.username}  (logout)`;
+    el.textContent = `⬡ ${Auth.username}  ▾`;
   } else {
     el.textContent = '⬡ Login / Register';
+    document.getElementById('user-dropdown').style.display = 'none';
   }
   const adminLink = document.getElementById('admin-link');
   if (adminLink) adminLink.style.display = Auth.isAdmin() ? '' : 'none';
@@ -1782,6 +1796,12 @@ async function handleOAuthCallback() {
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────
+document.addEventListener('click', e => {
+  if (!e.target.closest('#login-btn') && !e.target.closest('#user-dropdown')) {
+    const dd = document.getElementById('user-dropdown');
+    if (dd) dd.style.display = 'none';
+  }
+});
 updateAuthHUD();
 fetchActiveWorldMap(); // always fetch — world map is public
 updateCountdown();
