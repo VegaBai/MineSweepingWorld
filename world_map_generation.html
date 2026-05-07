@@ -478,12 +478,20 @@ function resetRefImg() {
 function generateMap() {
   if (!imageLoaded) return;
 
-  // Reference mode: just create a blank grid — user will paint manually over the image overlay
+  // Reference mode: create blank grid and auto-fit reference image to it
   if (document.getElementById('pixel-art-mode').checked) {
     const sw = imageLoaded.naturalWidth, sh = imageLoaded.naturalHeight;
     const maxSide = parseInt(document.getElementById('max-side').value) || 20;
-    const scale = Math.min(maxSide / sw, maxSide / sh, 1);
-    initGrid(Math.max(1, Math.round(sw * scale)), Math.max(1, Math.round(sh * scale)));
+    const s = Math.min(maxSide / sw, maxSide / sh, 1);
+    const gw = Math.max(1, Math.round(sw * s));
+    const gh = Math.max(1, Math.round(sh * s));
+    // Scale reference image so it fills exactly the new grid
+    const fitScale = Math.round(Math.min(gw / sw, gh / sh) * 1000) / 1000;
+    refImg.scale = fitScale; refImg.x = 0; refImg.y = 0;
+    document.getElementById('ref-scale').value = fitScale;
+    document.getElementById('ref-x').value = 0;
+    document.getElementById('ref-y').value = 0;
+    initGrid(gw, gh);
     updateStatusCounts();
     return;
   }
