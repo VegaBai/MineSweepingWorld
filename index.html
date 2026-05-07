@@ -1647,7 +1647,7 @@ let authMode = 'login'; // 'login' | 'register'
 function showAuthOrProfile() {
   if (Auth.isLoggedIn()) {
     const dd = document.getElementById('user-dropdown');
-    dd.style.display = dd.style.display === '' ? 'none' : '';
+    dd.style.display = dd.style.display === 'block' ? 'none' : 'block';
   } else {
     showAuth('login');
   }
