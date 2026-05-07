@@ -58,6 +58,15 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 
 /* ── Social HUD additions ── */
 #hud-online{font-size:11px;color:#7aaac8}
+#hud-week-lb{margin-top:3px}
+.hud-lb-title{font-size:9px;color:#334;letter-spacing:.4px;margin-bottom:2px}
+.hud-lb-row{display:flex;align-items:center;gap:5px;font-size:11px;line-height:1.7}
+.hud-lb-rank{color:#334;width:14px;flex-shrink:0;font-size:10px}
+.hud-lb-name{flex:1;color:#8aaac8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:88px}
+.hud-lb-bar-wrap{width:40px;height:4px;background:#0a1020;border-radius:2px;flex-shrink:0}
+.hud-lb-bar{height:100%;border-radius:2px;background:#3a7a5a}
+.hud-lb-pct{color:#6aaa8a;width:38px;text-align:right;flex-shrink:0;font-size:10px}
+#hud-divider{border:none;border-top:1px solid #1a2a4a;margin:6px 0}
 #login-btn{position:fixed;top:12px;right:12px;z-index:50;background:rgba(20,50,100,.9);border:1px solid #2a5aaa;border-radius:6px;padding:7px 16px;color:#aaccea;font-family:inherit;font-size:13px;cursor:pointer;pointer-events:auto;backdrop-filter:blur(4px);transition:background .15s,border-color .15s;white-space:nowrap}
 #login-btn:hover{background:rgba(30,70,150,.95);border-color:#4a8ada}
 #leaderboard-panel{position:fixed;top:0;right:0;bottom:0;width:260px;background:rgba(6,10,26,.97);border-left:1px solid #1a2a4a;padding:16px 14px;transform:translateX(100%);transition:transform .25s;z-index:40;overflow-y:auto;display:flex;flex-direction:column;gap:0}
@@ -110,12 +119,13 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 <div id="world-screen">
   <canvas id="world-canvas"></canvas>
   <div id="world-hud">
-    <div id="hud-pos">Center: (50, 50)</div>
     <div id="hud-zoom">Zoom: 1.00×</div>
     <div id="hud-countdown" style="font-size:18px;font-weight:bold;color:#aaccee;letter-spacing:.5px;margin-bottom:2px"></div>
+    <div id="hud-online">0 players online</div>
+    <div id="hud-week-lb"></div>
     <div class="dim" id="hud-hint">Click any grid to start a game</div>
     <div class="dim">Drag to pan &nbsp;·&nbsp; Scroll to zoom</div>
-    <div id="hud-online" style="margin-top:4px"></div>
+    <hr id="hud-divider">
     <div id="hud-lives"></div>
     <div id="hud-credits"></div>
     <button id="hud-illuminate-btn" onclick="toggleIlluminateMode()" style="display:none">✨ Illuminate Mode</button>
@@ -1211,6 +1221,25 @@ function getNextMondayMs() {
   return Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()+daysTo,0,0,0,0)-now.getTime();
 }
 
+async function fetchWeekLeaderboard() {
+  try {
+    const data = await apiFetch('/illuminate?action=weekstats');
+    const el = document.getElementById('hud-week-lb');
+    if (!el) return;
+    if (!data.rankings || data.rankings.length === 0) { el.innerHTML = ''; return; }
+    const maxPct = data.rankings[0].pct || 1;
+    el.innerHTML = '<div class="hud-lb-title">THIS WEEK</div>' +
+      data.rankings.map((r, i) =>
+        `<div class="hud-lb-row">
+          <span class="hud-lb-rank">${i+1}</span>
+          <span class="hud-lb-name">${r.username}</span>
+          <div class="hud-lb-bar-wrap"><div class="hud-lb-bar" style="width:${Math.round(r.pct/maxPct*100)}%"></div></div>
+          <span class="hud-lb-pct">${r.pct}%</span>
+        </div>`
+      ).join('');
+  } catch {}
+}
+
 function updateCountdown() {
   const el=document.getElementById('hud-countdown');
   if(!el) return;
@@ -1250,8 +1279,6 @@ function checkMaintenanceClient() {
 function loop() {
   if (screen==='world') {
     drawWorld();
-    const [cx,cy]=s2t(wCvs.width/2,wCvs.height/2);
-    document.getElementById('hud-pos').textContent=`Center: (${Math.floor(cx)}, ${Math.floor(cy)})`;
     const activeCount=[...store.values()].filter(g=>g.status==='active').length;
     document.getElementById('hud-hint').textContent=activeCount>0
       ?`${activeCount} game${activeCount>1?'s':''} in progress — click to switch`
@@ -1759,6 +1786,8 @@ updateAuthHUD();
 fetchActiveWorldMap(); // always fetch — world map is public
 updateCountdown();
 setInterval(updateCountdown, 30000);
+fetchWeekLeaderboard();
+setInterval(fetchWeekLeaderboard, 120000);
 fetchIlluminateSettings(); // public endpoint
 if (Auth.isLoggedIn()) {
   syncLoadAll();

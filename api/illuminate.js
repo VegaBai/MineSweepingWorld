@@ -26,6 +26,34 @@ export default async function handler(req, res) {
   const db = getPool();
   const { action } = req.query ?? {};
 
+  // Public: this week's top players by won-cell %
+  if (req.method === 'GET' && action === 'weekstats') {
+    const mapRes = await db.query(
+      'SELECT data, width, height FROM world_maps WHERE is_active=TRUE LIMIT 1'
+    );
+    if (!mapRes.rows.length) return res.json({ total: 0, rankings: [] });
+    const { data, width, height } = mapRes.rows[0];
+    const mapData = JSON.parse(data);
+    const total = mapData.filter(v => v > 0).length; // non-background playable cells
+    const r = await db.query(`
+      SELECT u.username, COUNT(*) AS won
+      FROM users u
+      JOIN grid_states gs ON gs.user_id = u.id
+      WHERE gs.status = 'won'
+      GROUP BY u.id, u.username
+      ORDER BY won DESC
+      LIMIT 8
+    `);
+    return res.json({
+      total,
+      rankings: r.rows.map(row => ({
+        username: row.username,
+        won: parseInt(row.won),
+        pct: total > 0 ? Math.round(parseInt(row.won) / total * 1000) / 10 : 0,
+      })),
+    });
+  }
+
   // Public: returns illuminate ratios and life regen time (no auth needed)
   if (req.method === 'GET' && action === 'settings') {
     const s = await getSettings(db);
