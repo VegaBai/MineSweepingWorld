@@ -959,3 +959,120 @@ JOIN grid_states（status='won'）→ 按用户分组统计 won 数
 ```
 
 百分比（pct）= `round(won / total * 1000) / 10`，保留一位小数。
+
+排行榜和周榜名字均使用 `COALESCE(display_name, username)`，display_name 设置后自动生效。
+
+---
+
+## v1.0 — 用户个人主页（2026-05-07）
+
+### v1.0.1 需求概述
+
+登录后右上角按钮改为下拉菜单，新增独立的个人主页，包含三个模块：
+- **设置**：修改头像和显示昵称
+- **游玩记录**：历史每周地图的解锁统计
+- **成就**：已解锁与未解锁成就一览
+
+---
+
+### v1.0.2 数据库（Migration 007）
+
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar       TEXT DEFAULT 'default';
+```
+
+- `display_name`：可选昵称，2–20 字符，排行榜和按钮优先显示此字段
+- `avatar`：头像 key，对应前端预设 emoji 列表，默认 `'default'`（显示为 ⬡）
+
+---
+
+### v1.0.3 api/profile.js（第 12 个 Serverless Function）
+
+统一处理所有个人主页相关请求（`?resource=` 路由），全部需要认证：
+
+| resource | 方法 | 说明 |
+|----------|------|------|
+| `profile` | GET | 返回 username、display_name、avatar、email、role、created_at |
+| `profile` | PATCH | 更新 display_name（2–20 字符）和/或 avatar |
+| `history` | GET | 返回当前周（含难度细分）+ 历史各周统计 |
+| `achievements` | GET | 返回 12 项成就的解锁状态及统计数据 |
+
+**history 实现逻辑：**
+- 历史周：从 `map_week_snapshots JOIN world_maps` 按地图分组，每项包含各难度 won/lost/total
+- 当前周：从 `grid_states` JOIN 活跃地图的 `data` JSON 在应用层计算各难度分布（避免复杂 SQL）
+
+**achievements 实现逻辑：**
+
+从以下 5 条查询汇总数据后，对 12 项成就逐一判断：
+
+| 查询 | 用途 |
+|------|------|
+| `grid_states` won/lost 总数 | 当前周胜负计数 |
+| `map_week_snapshots` 按难度聚合 | 历史胜负 + 参与周数 |
+| 窗口函数 RANK() 分周 | 最佳排名 |
+| `map_week_snapshots` won >= total | 某难度全清周数 |
+
+**12 项成就定义：**
+
+| id | 图标 | 标题 | 条件 |
+|----|------|------|------|
+| first_win | 🌱 | 初出茅庐 | 累计赢得 ≥ 1 场 |
+| first_loss | 💥 | 踩雷留名 | 累计失败 ≥ 1 场 |
+| wins_10 | ⚡ | 熟能生巧 | 累计赢得 ≥ 10 场 |
+| wins_50 | 🔥 | 百战之师 | 累计赢得 ≥ 50 场 |
+| wins_100 | 💎 | 永不言败 | 累计赢得 ≥ 100 场 |
+| won_expert | 🏆 | 专家认证 | Expert 难度赢得 ≥ 1 场 |
+| won_master | 👑 | 踩雷宗师 | Master 难度赢得 ≥ 1 场 |
+| weeks_3 | 📅 | 周常老兵 | 参与 ≥ 3 张不同周地图 |
+| top1_week | 🥇 | 本周冠军 | 某周排名第一 |
+| top3_week | 🥉 | 前三甲 | 某周排名前三 |
+| sweep_easy | 🌿 | Easy 全清 | 某周赢得所有 Easy 格子 |
+| sweep_master | 🐉 | Master 全清 | 某周赢得所有 Master 格子 |
+
+---
+
+### v1.0.4 user_profile.html（新页面）
+
+路由：`/user_profile`（vercel.json 新增重写规则）
+
+**布局：**
+- 顶栏：返回按钮 + 用户名
+- 用户信息区：大号头像 emoji + 显示名称 + @用户名 + 角色徽章 + 注册日期
+- 三标签页（懒加载，首次切换时才请求数据）：设置 / 游玩记录 / 成就
+
+**设置页：**
+- 13 个头像预设（emoji 按钮，选中高亮白色边框）
+- 显示昵称输入框（最多 20 字符）
+- 保存按钮 + 状态提示
+- 只读信息：邮箱、注册时间
+
+预设头像映射：`default:⬡ dragon:🐉 fox:🦊 panda:🐼 star:⭐ moon:🌙 fire:🔥 gem:💎 target:🎯 wave:🌊 bolt:⚡ clover:🍀 game:🎮`
+
+**游玩记录页：**
+- 当前周卡片（绿色边框，始终展开）
+- 历史周卡片列表（可点击展开/收起）
+- 每张卡片展示各难度色块 + 标签 + won/total + 百分比进度条
+
+**成就页：**
+- 顶部统计行：总胜场 / 总败场 / 参与周数 / 最佳排名
+- 3 列响应式成就卡片网格
+  - 已解锁：全色显示 + 绿色 ✓ 徽章
+  - 未解锁：`opacity:0.35; filter:grayscale(1)` + 锁图标遮罩
+
+---
+
+### v1.0.5 index.html — 右上角改为下拉菜单
+
+- **旧**：点击用户名弹出 `confirm()` 询问是否登出
+- **新**：显示下拉菜单，包含「👤 个人主页」和「🚪 退出」两项
+
+下拉显示逻辑：`display:none` ↔ `display:block`，点击外部区域自动关闭（`document.addEventListener('click', ...)`）。
+
+**Auth 对象扩展：**
+- 新增 `displayName` 字段，持久化至 `localStorage msw_display_name`
+- `displayLabel()` 方法：返回 `displayName ?? username`，用于按钮显示
+- `setDisplayName(dn)` 方法：更新内存和 localStorage 并调用 `updateAuthHUD()`
+- 登录后（`setTokens` 调用后）和页面加载时，自动调用 `GET /profile?resource=profile` 取回 display_name 并同步
+
+排行榜（`/api/leaderboard/index.js`）和周榜（`/api/illuminate.js weekstats`）均改用 `COALESCE(display_name, username)` 作为展示名称。
