@@ -874,3 +874,88 @@ GET /api/world/map
 - Illuminate Mode 下世界地图鼠标改为 pointer（拖拽时仍为 grabbing）
 - 游戏页 Restart 按钮移到页面顶部居中（`position:fixed;top:10px;left:50%`），避免被右上角登录按钮遮挡
 - 左上角难度图例改为纵向排列，上方添加 illuminate 提示文字
+- HUD 整体字号放大、颜色改为浅色（深色在深色背景下不可见）
+- `#hud-countdown`（Next map 倒计时）设为 `font-size:18px;font-weight:bold`，为 HUD 内最大元素
+- 生命值恢复倒计时：登录状态下 `#hud-lives` 右侧追加 `<span id="lives-regen-cd">` 显示 `M:SS` 格式倒计时；`tickLivesCountdown()` 每秒更新该 span，不重绘整个 lives 区；`scheduleRegenRefetch()` 负责设置 `livesRegenAt` 绝对时间戳并启动 / 清除 `livesCountdownIV`
+
+---
+
+## v0.8 — World Map Generation 功能增强（2026-05-07）
+
+### v0.8.1 参考图模式（world_map_generation.html）
+
+将原"像素图模式"完全重新设计：取消自动像素检测算法，改为将上传的图片以半透明叠加层显示在 Grid Editor 底部，供用户手动描摹。
+
+*UI 控件（IMAGE IMPORT 面板内，勾选后出现）：*
+- **透明度 %**（5–90，默认 40）
+- **缩放（格/像素）**：每个图片像素对应几个格子（默认 1，支持 0.05 步进）
+- **X/Y 偏移（格）**：参考图相对格子原点的偏移（支持 0.5 步进）
+- **重置**按钮：归零偏移和缩放
+
+*Grid Editor 渲染逻辑变更：*
+- `drawGrid()` 在所有模式下均先执行 `clearRect`
+- 背景色格子（`v === 0`）永远透明，不填充（显示 canvas-wrap 背景 `#050810`）
+- 参考图模式下先以 `globalAlpha = opacity/100` 绘制参考图，再将非背景格子叠加其上
+- 橡皮擦（选 BG 色涂抹）触发全量 `drawGrid()` 重绘，正确还原参考图区域
+- 网格线改为 `rgba(255,255,255,0.15)` 以在透明背景上保持可见
+
+*Generate Grid 在参考图模式下的行为：*
+- 不执行 k-means 颜色量化
+- 按 Max Side 创建等比例空白格子网格
+- 自动计算 `refImg.scale = min(gridW/imgW, gridH/imgH)` 使参考图恰好填满网格，并将计算值回写至缩放输入框
+
+---
+
+### v0.8.2 Grid Editor 手动设置尺寸
+
+工具栏新增 **W / H 数字输入框**（各 2–200 范围）和 **New Grid** 按钮。点击后创建指定尺寸的空白网格，`cellSize` 自动重算。
+
+---
+
+### v0.8.3 Tier Distribution 统计面板（world_map_generation.html）
+
+侧栏新增 **TIER DISTRIBUTION** 面板（位于 SAVE TO DATABASE 上方）。
+
+*显示内容（每种难度一行）：*
+- 颜色色块 + 难度名
+- 以非背景格子为分母的实际占比横向进度条
+- 实际百分比（颜色编码：偏差 >3% 偏红/偏蓝，±3% 以内显示绿色）
+- 推荐参考值（灰色）
+
+*推荐参考比例（来自原始设计出现频率）：*
+
+| 难度 | 推荐占比 |
+|---|---|
+| EASY | 40% |
+| NORMAL | 25% |
+| MEDIUM | 18% |
+| HARD | 10% |
+| EXPERT | 5% |
+| MASTER | 2% |
+
+`updateStatusCounts()` 同时更新状态栏文本和此面板，触发时机不变（涂色、导入、生成、清除等操作后）。
+
+---
+
+## v0.9 — 首页 HUD 社交功能（2026-05-07）
+
+### v0.9.1 HUD 调整（index.html）
+
+- **移除 Center 坐标显示**：删除 `#hud-pos` div 及 `loop()` 内的每帧更新
+- **在线玩家数前置**：`#hud-online` 移至 Next map 倒计时正下方，初始值为 "0 players online"（presence 轮询更新后覆盖）
+- **本周玩家排行榜**：`#hud-week-lb` 紧跟在线人数之后，显示本周各玩家已解锁像素格占总可玩格数的百分比，最多 8 名，带比例进度条，Boot 时立即请求，之后每 2 分钟自动刷新
+- **Lives 前隔断线**：`<hr id="hud-divider">` 在 `#hud-lives` 之前，视觉区分社交信息与个人状态
+
+---
+
+### v0.9.2 api/illuminate.js — weekstats 接口
+
+新增 `GET /illuminate?action=weekstats`（公开，无需认证）：
+
+```
+解析当前激活地图的 data JSON → 统计非背景格子数（total）
+JOIN grid_states（status='won'）→ 按用户分组统计 won 数
+返回 { total, rankings: [{ username, won, pct }] }（按 won DESC，最多 8 条）
+```
+
+百分比（pct）= `round(won / total * 1000) / 10`，保留一位小数。
