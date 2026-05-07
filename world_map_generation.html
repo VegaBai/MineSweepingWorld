@@ -111,13 +111,28 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
       <div style="margin-top:10px">
         <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:12px;cursor:pointer">
           <input type="checkbox" id="pixel-art-mode" onchange="togglePixelArtMode()">
-          像素图模式（按原始像素读取，忽略 Max Side）
+          参考图模式（将图片叠加到 Grid Editor 作为描摹底图）
         </label>
-        <div id="pixel-art-opts" style="display:none;margin-bottom:8px">
-          <div class="field">
-            <label>最小像素块尺寸（px，过滤压缩噪点）</label>
-            <input type="number" id="min-pixel-size" value="3" min="1" max="50">
+        <div id="pixel-art-opts" style="display:none;margin-bottom:8px;border-top:1px solid #1a2a4a;padding-top:8px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <div class="field">
+              <label>透明度 %</label>
+              <input type="number" id="ref-opacity" value="40" min="5" max="90" step="5" oninput="updateRefImg()">
+            </div>
+            <div class="field">
+              <label>缩放（格/像素）</label>
+              <input type="number" id="ref-scale" value="1" min="0.05" max="50" step="0.05" oninput="updateRefImg()">
+            </div>
+            <div class="field">
+              <label>X 偏移（格）</label>
+              <input type="number" id="ref-x" value="0" step="0.5" oninput="updateRefImg()">
+            </div>
+            <div class="field">
+              <label>Y 偏移（格）</label>
+              <input type="number" id="ref-y" value="0" step="0.5" oninput="updateRefImg()">
+            </div>
           </div>
+          <button class="btn" style="width:auto;padding:3px 10px;font-size:11px;margin-top:4px" onclick="resetRefImg()">重置</button>
         </div>
         <div class="field" id="max-side-field">
           <label>MAX SIDE (CELLS)</label>
@@ -268,6 +283,7 @@ let selectedPal = 0;       // currently selected palette index (0-6)
 let imageLoaded = null;    // HTMLImageElement
 let isPainting = false;
 let cellSize = 24;
+const refImg = { show: false, x: 0, y: 0, scale: 1, opacity: 40 };
 
 // ── Canvas ──────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('grid-canvas');
@@ -301,13 +317,29 @@ function resizeCanvas() {
 
 function drawGrid() {
   if (!gridData) return;
+  // Reference image underlay
+  if (refImg.show && imageLoaded) {
+    ctx.save();
+    ctx.globalAlpha = refImg.opacity / 100;
+    ctx.drawImage(imageLoaded,
+      refImg.x * cellSize,
+      refImg.y * cellSize,
+      imageLoaded.naturalWidth  * refImg.scale * cellSize,
+      imageLoaded.naturalHeight * refImg.scale * cellSize
+    );
+    ctx.restore();
+  }
+  // Grid cells (semi-transparent fill so reference shows through)
+  const cellAlpha = refImg.show ? 0.55 : 1;
   for (let y = 0; y < gridH; y++) {
     for (let x = 0; x < gridW; x++) {
       const v = gridData[y * gridW + x];
+      ctx.globalAlpha = cellAlpha;
       ctx.fillStyle = PALETTE[v].color;
       ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
     }
   }
+  ctx.globalAlpha = 1;
   // Grid lines
   ctx.strokeStyle = 'rgba(0,0,0,0.35)';
   ctx.lineWidth = 0.5;
@@ -412,89 +444,46 @@ function loadImageFile(file) {
 
 function togglePixelArtMode() {
   const on = document.getElementById('pixel-art-mode').checked;
-  document.getElementById('max-side-field').style.display = on ? 'none' : '';
   document.getElementById('pixel-art-opts').style.display = on ? '' : 'none';
+  refImg.show = on;
+  drawGrid();
 }
 
-// Detect pixel block size: GCD of same-color run lengths, ignoring runs shorter than minBlockSize.
-// minBlockSize lets users filter out 1–2px compression artifacts manually.
-function detectPixelSize(pixels, w, h, minBlockSize) {
-  const T = 25;
-  function same(i, j) {
-    return Math.abs(pixels[i*4]   - pixels[j*4])   +
-           Math.abs(pixels[i*4+1] - pixels[j*4+1]) +
-           Math.abs(pixels[i*4+2] - pixels[j*4+2]) <= T;
-  }
-  function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
+function updateRefImg() {
+  refImg.opacity = parseFloat(document.getElementById('ref-opacity').value) || 40;
+  refImg.scale   = parseFloat(document.getElementById('ref-scale').value)   || 1;
+  refImg.x       = parseFloat(document.getElementById('ref-x').value)       || 0;
+  refImg.y       = parseFloat(document.getElementById('ref-y').value)       || 0;
+  drawGrid();
+}
 
-  let g = 0;
-  for (let y = 0; y < h; y++) {
-    let run = 1;
-    for (let x = 1; x < w; x++) {
-      if (same(y*w + x, y*w + x - 1)) { run++; }
-      else { if (run >= minBlockSize) g = gcd(g, run); run = 1; }
-    }
-    if (run >= minBlockSize) g = gcd(g, run);
-  }
-  for (let x = 0; x < w; x++) {
-    let run = 1;
-    for (let y = 1; y < h; y++) {
-      if (same(y*w + x, (y-1)*w + x)) { run++; }
-      else { if (run >= minBlockSize) g = gcd(g, run); run = 1; }
-    }
-    if (run >= minBlockSize) g = gcd(g, run);
-  }
-  return Math.max(1, g);
+function resetRefImg() {
+  refImg.x = 0; refImg.y = 0; refImg.scale = 1; refImg.opacity = 40;
+  document.getElementById('ref-opacity').value = 40;
+  document.getElementById('ref-scale').value   = 1;
+  document.getElementById('ref-x').value       = 0;
+  document.getElementById('ref-y').value       = 0;
+  drawGrid();
 }
 
 function generateMap() {
   if (!imageLoaded) return;
-  const pixelArt = document.getElementById('pixel-art-mode').checked;
 
   const sw = imageLoaded.naturalWidth, sh = imageLoaded.naturalHeight;
-  let w, h, rgb;
+  const maxSide = parseInt(document.getElementById('max-side').value) || 20;
+  const scale = Math.min(maxSide / sw, maxSide / sh, 1);
+  const w = Math.max(1, Math.round(sw * scale));
+  const h = Math.max(1, Math.round(sh * scale));
 
-  if (pixelArt) {
-    // Draw at native resolution, no interpolation
-    const off = document.createElement('canvas');
-    off.width = sw; off.height = sh;
-    const octx = off.getContext('2d');
-    octx.imageSmoothingEnabled = false;
-    octx.drawImage(imageLoaded, 0, 0, sw, sh);
-    const pixels = octx.getImageData(0, 0, sw, sh).data;
+  const off = document.createElement('canvas');
+  off.width = w; off.height = h;
+  const octx = off.getContext('2d');
+  octx.drawImage(imageLoaded, 0, 0, w, h);
+  const pixels = octx.getImageData(0, 0, w, h).data;
 
-    // Find actual pixel block size (GCD of uniform-color run lengths)
-    const minBlock = Math.max(1, parseInt(document.getElementById('min-pixel-size').value) || 3);
-    const ps = detectPixelSize(pixels, sw, sh, minBlock);
-    w = Math.max(1, Math.floor(sw / ps));
-    h = Math.max(1, Math.floor(sh / ps));
-
-    // Sample the center of each block
-    rgb = [];
-    for (let gy = 0; gy < h; gy++) {
-      for (let gx = 0; gx < w; gx++) {
-        const cx = Math.min(sw - 1, Math.floor(gx * ps + ps / 2));
-        const cy = Math.min(sh - 1, Math.floor(gy * ps + ps / 2));
-        const i = (cy * sw + cx) * 4;
-        rgb.push([pixels[i], pixels[i+1], pixels[i+2]]);
-      }
-    }
-  } else {
-    const maxSide = parseInt(document.getElementById('max-side').value) || 20;
-    const scale = Math.min(maxSide / sw, maxSide / sh, 1);
-    w = Math.max(1, Math.round(sw * scale));
-    h = Math.max(1, Math.round(sh * scale));
-
-    const off = document.createElement('canvas');
-    off.width = w; off.height = h;
-    const octx = off.getContext('2d');
-    octx.drawImage(imageLoaded, 0, 0, w, h);
-    const pixels = octx.getImageData(0, 0, w, h).data;
-
-    rgb = [];
-    for (let i = 0; i < pixels.length; i += 4) {
-      rgb.push([pixels[i], pixels[i+1], pixels[i+2]]);
-    }
+  const rgb = [];
+  for (let i = 0; i < pixels.length; i += 4) {
+    rgb.push([pixels[i], pixels[i+1], pixels[i+2]]);
   }
 
   // K-means with k=7
