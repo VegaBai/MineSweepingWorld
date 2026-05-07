@@ -67,8 +67,16 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
 #canvas-toolbar{background:#080e22;border-bottom:1px solid #1a2a4a;padding:8px 14px;display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap}
 #canvas-info{font-size:11px;color:#446;margin-left:auto}
-#canvas-wrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:20px;background:#050810}
-#grid-canvas{image-rendering:pixelated;cursor:crosshair;border:1px solid #2a4070}
+#canvas-wrap{flex:1;overflow:auto;padding:20px;background:#050810}
+#grid-canvas{image-rendering:pixelated;cursor:crosshair;border:1px solid #2a4070;display:block;margin:0 auto}
+#tier-stats{display:flex;flex-direction:column;gap:5px}
+.tier-stat-row{display:flex;align-items:center;gap:6px;font-size:11px}
+.tier-stat-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.tier-stat-label{width:46px;color:#556;flex-shrink:0}
+.tier-stat-bar-wrap{flex:1;height:6px;background:#0a1020;border-radius:3px;overflow:hidden}
+.tier-stat-bar{height:100%;border-radius:3px;transition:width .2s}
+.tier-stat-pct{width:36px;text-align:right;color:#8ab}
+.tier-stat-ref{width:32px;text-align:right;color:#334;font-size:10px}
 
 /* Status bar */
 #status-bar{background:#050810;border-top:1px solid #0e1a30;padding:5px 14px;font-size:11px;color:#334;flex-shrink:0;display:flex;gap:16px}
@@ -156,6 +164,12 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
         <button class="btn" onclick="document.getElementById('txt-file').click()">Upload TXT</button>
       </div>
       <input type="file" id="txt-file" accept=".txt,text/plain" style="display:none" onchange="importTxt(event)">
+    </div>
+
+    <!-- Tier Stats -->
+    <div class="panel">
+      <div class="panel-title">TIER DISTRIBUTION <span style="color:#223;font-weight:normal">（实际% · 推荐%）</span></div>
+      <div id="tier-stats"><div style="color:#334;font-size:11px">No grid loaded</div></div>
     </div>
 
     <!-- Save to DB -->
@@ -830,12 +844,39 @@ function updateCanvasInfo() {
   document.getElementById('canvas-info').textContent = gridData ? `${gridW} × ${gridH} cells` : 'No grid loaded';
 }
 
+const TIER_RECOMMENDED = [40, 25, 18, 10, 5, 2]; // easy→master, % of non-BG cells
+
 function updateStatusCounts() {
   if (!gridData) return;
   const counts = new Array(7).fill(0);
   gridData.forEach(v => counts[v]++);
   const parts = PALETTE.map((p, i) => `${p.label}: ${counts[i]}`);
   document.getElementById('status-counts').textContent = parts.join('  ·  ');
+
+  const nonBg = counts.slice(1).reduce((a, b) => a + b, 0);
+  const container = document.getElementById('tier-stats');
+  if (!container) return;
+  if (nonBg === 0) {
+    container.innerHTML = '<div style="color:#334;font-size:11px">No painted cells</div>';
+    return;
+  }
+  container.innerHTML = TIERS.map((t, i) => {
+    const cnt   = counts[i + 1];
+    const pct   = nonBg > 0 ? (cnt / nonBg * 100) : 0;
+    const rec   = TIER_RECOMMENDED[i];
+    const diff  = pct - rec;
+    const diffColor = diff > 3 ? '#f8a' : diff < -3 ? '#8af' : '#6a6';
+    const barW  = Math.round(pct);
+    return `<div class="tier-stat-row">
+      <span class="tier-stat-swatch" style="background:${t.color}"></span>
+      <span class="tier-stat-label">${t.label}</span>
+      <div class="tier-stat-bar-wrap">
+        <div class="tier-stat-bar" style="width:${barW}%;background:${t.color}"></div>
+      </div>
+      <span class="tier-stat-pct" style="color:${diffColor}">${pct.toFixed(1)}%</span>
+      <span class="tier-stat-ref">${rec}%</span>
+    </div>`;
+  }).join('');
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
