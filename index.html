@@ -1310,13 +1310,15 @@ const API_BASE = '/api';
 // ── Token storage ──────────────────────────────────────────────────────────
 const Auth = {
   _access: null,
-  _refresh: localStorage.getItem('msw_refresh'),
-  username: localStorage.getItem('msw_username'),
-  userId:   localStorage.getItem('msw_userId'),
-  role:     localStorage.getItem('msw_role') ?? 'user',
+  _refresh:    localStorage.getItem('msw_refresh'),
+  username:    localStorage.getItem('msw_username'),
+  userId:      localStorage.getItem('msw_userId'),
+  role:        localStorage.getItem('msw_role') ?? 'user',
+  displayName: localStorage.getItem('msw_display_name') || null,
 
   isLoggedIn() { return !!this._refresh; },
   isAdmin()    { return this.role === 'admin'; },
+  displayLabel() { return this.displayName || this.username; },
 
   setTokens({ accessToken, refreshToken, username, userId, role = 'user' }) {
     this._access  = accessToken;
@@ -1331,8 +1333,15 @@ const Auth = {
     updateAuthHUD();
   },
 
+  setDisplayName(dn) {
+    this.displayName = dn || null;
+    if (dn) localStorage.setItem('msw_display_name', dn);
+    else    localStorage.removeItem('msw_display_name');
+    updateAuthHUD();
+  },
+
   clear() {
-    this._access = this._refresh = this.username = this.userId = null;
+    this._access = this._refresh = this.username = this.userId = this.displayName = null;
     this.role = 'user';
     playerLives = null; livesRegenAt = null; clearInterval(livesCountdownIV); livesCountdownIV = null; updateLivesDisplay();
     illuminateCredits = null; illuminateMode = false; wCvs.classList.remove('illuminate'); updateCreditsDisplay();
@@ -1340,6 +1349,7 @@ const Auth = {
     localStorage.removeItem('msw_username');
     localStorage.removeItem('msw_userId');
     localStorage.removeItem('msw_role');
+    localStorage.removeItem('msw_display_name');
     updateAuthHUD();
   },
 
@@ -1702,6 +1712,7 @@ async function submitAuth() {
       body: JSON.stringify(payload),
     });
     Auth.setTokens(data);
+    apiFetch('/profile?resource=profile').then(p => Auth.setDisplayName(p.display_name)).catch(() => {});
     hideAuth();
     await syncLoadAll();      // pull server progress into local store
     fetchLives();
@@ -1719,7 +1730,7 @@ async function submitAuth() {
 function updateAuthHUD() {
   const el = document.getElementById('login-btn');
   if (Auth.isLoggedIn()) {
-    el.textContent = `⬡ ${Auth.username}  ▾`;
+    el.textContent = `⬡ ${Auth.displayLabel()}  ▾`;
   } else {
     el.textContent = '⬡ Login / Register';
     document.getElementById('user-dropdown').style.display = 'none';
@@ -1810,6 +1821,7 @@ fetchWeekLeaderboard();
 setInterval(fetchWeekLeaderboard, 120000);
 fetchIlluminateSettings(); // public endpoint
 if (Auth.isLoggedIn()) {
+  apiFetch('/profile?resource=profile').then(p => Auth.setDisplayName(p.display_name)).catch(() => {});
   syncLoadAll();
   fetchLives();
   fetchIlluminateCredits();
