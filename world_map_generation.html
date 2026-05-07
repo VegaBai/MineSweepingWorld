@@ -409,36 +409,82 @@ function togglePixelArtMode() {
   document.getElementById('max-side-field').style.display = on ? 'none' : '';
 }
 
+// Returns the pixel block size by computing GCD of all same-color run lengths
+function detectPixelSize(pixels, w, h) {
+  const T = 25; // per-channel sum threshold for "same color"
+  function same(i, j) {
+    return Math.abs(pixels[i*4]   - pixels[j*4])   +
+           Math.abs(pixels[i*4+1] - pixels[j*4+1]) +
+           Math.abs(pixels[i*4+2] - pixels[j*4+2]) <= T;
+  }
+  function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
+  let g = 0;
+  for (let y = 0; y < h; y++) {
+    let run = 1;
+    for (let x = 1; x < w; x++) {
+      if (same(y*w + x, y*w + x - 1)) { run++; }
+      else { g = gcd(g, run); run = 1; }
+    }
+    g = gcd(g, run);
+  }
+  for (let x = 0; x < w; x++) {
+    let run = 1;
+    for (let y = 1; y < h; y++) {
+      if (same(y*w + x, (y-1)*w + x)) { run++; }
+      else { g = gcd(g, run); run = 1; }
+    }
+    g = gcd(g, run);
+  }
+  return Math.max(1, g);
+}
+
 function generateMap() {
   if (!imageLoaded) return;
   const pixelArt = document.getElementById('pixel-art-mode').checked;
 
-  let sw = imageLoaded.naturalWidth, sh = imageLoaded.naturalHeight;
-  let w, h;
+  const sw = imageLoaded.naturalWidth, sh = imageLoaded.naturalHeight;
+  let w, h, rgb;
 
   if (pixelArt) {
-    // Use original pixel dimensions directly — each source pixel = one grid cell
-    w = sw; h = sh;
+    // Draw at native resolution, no interpolation
+    const off = document.createElement('canvas');
+    off.width = sw; off.height = sh;
+    const octx = off.getContext('2d');
+    octx.imageSmoothingEnabled = false;
+    octx.drawImage(imageLoaded, 0, 0, sw, sh);
+    const pixels = octx.getImageData(0, 0, sw, sh).data;
+
+    // Find actual pixel block size (GCD of uniform-color run lengths)
+    const ps = detectPixelSize(pixels, sw, sh);
+    w = Math.max(1, Math.floor(sw / ps));
+    h = Math.max(1, Math.floor(sh / ps));
+
+    // Sample the center of each block
+    rgb = [];
+    for (let gy = 0; gy < h; gy++) {
+      for (let gx = 0; gx < w; gx++) {
+        const cx = Math.min(sw - 1, Math.floor(gx * ps + ps / 2));
+        const cy = Math.min(sh - 1, Math.floor(gy * ps + ps / 2));
+        const i = (cy * sw + cx) * 4;
+        rgb.push([pixels[i], pixels[i+1], pixels[i+2]]);
+      }
+    }
   } else {
     const maxSide = parseInt(document.getElementById('max-side').value) || 20;
     const scale = Math.min(maxSide / sw, maxSide / sh, 1);
     w = Math.max(1, Math.round(sw * scale));
     h = Math.max(1, Math.round(sh * scale));
-  }
 
-  // Draw to offscreen canvas at grid resolution (no interpolation in pixel art mode)
-  const off = document.createElement('canvas');
-  off.width = w; off.height = h;
-  const octx = off.getContext('2d');
-  if (pixelArt) octx.imageSmoothingEnabled = false;
-  octx.drawImage(imageLoaded, 0, 0, w, h);
-  const imgData = octx.getImageData(0, 0, w, h);
-  const pixels = imgData.data; // RGBA flat
+    const off = document.createElement('canvas');
+    off.width = w; off.height = h;
+    const octx = off.getContext('2d');
+    octx.drawImage(imageLoaded, 0, 0, w, h);
+    const pixels = octx.getImageData(0, 0, w, h).data;
 
-  // Extract RGB pixels
-  const rgb = [];
-  for (let i = 0; i < pixels.length; i += 4) {
-    rgb.push([pixels[i], pixels[i+1], pixels[i+2]]);
+    rgb = [];
+    for (let i = 0; i < pixels.length; i += 4) {
+      rgb.push([pixels[i], pixels[i+1], pixels[i+2]]);
+    }
   }
 
   // K-means with k=7
