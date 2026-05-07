@@ -163,6 +163,11 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
   <div id="main-area">
     <div id="canvas-toolbar">
       <span style="font-size:12px;color:#6a8aaa">GRID EDITOR</span>
+      <label style="font-size:11px;color:#8aaacc;display:flex;align-items:center;gap:4px">
+        W<input type="number" id="new-grid-w" value="20" min="2" max="200" style="width:48px;padding:2px 4px;font-size:11px;background:#0d1b2a;color:#c8d8e8;border:1px solid #1a3a5a;border-radius:3px">
+        H<input type="number" id="new-grid-h" value="16" min="2" max="200" style="width:48px;padding:2px 4px;font-size:11px;background:#0d1b2a;color:#c8d8e8;border:1px solid #1a3a5a;border-radius:3px">
+      </label>
+      <button class="btn" style="width:auto;padding:4px 10px;font-size:11px" onclick="newGrid()">New Grid</button>
       <button class="btn" style="width:auto;padding:4px 10px;font-size:11px" onclick="clearGrid()">Clear All</button>
       <button class="btn" style="width:auto;padding:4px 10px;font-size:11px" onclick="fillGrid()">Fill BG</button>
       <span id="canvas-info">No grid loaded</span>
@@ -261,6 +266,13 @@ let cellSize = 24;
 // ── Canvas ──────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('grid-canvas');
 const ctx = canvas.getContext('2d');
+
+function newGrid() {
+  const w = Math.max(2, Math.min(200, parseInt(document.getElementById('new-grid-w').value) || 20));
+  const h = Math.max(2, Math.min(200, parseInt(document.getElementById('new-grid-h').value) || 16));
+  initGrid(w, h);
+  updateStatusCounts();
+}
 
 function initGrid(w, h) {
   gridW = w; gridH = h;
