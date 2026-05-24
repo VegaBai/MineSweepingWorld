@@ -50,12 +50,13 @@ async function handleWorldmap(req, res, user, db) {
     const { id } = req.query ?? {};
     if (id) {
       const r = await db.query(
-        'SELECT id, name, data, width, height, is_active, created_at FROM world_maps WHERE id = $1',
+        'SELECT id, name, data, width, height, is_active, created_at, colors FROM world_maps WHERE id = $1',
         [id]
       );
       if (r.rows.length === 0) return res.status(404).json({ error: 'not found' });
       const row = r.rows[0];
       row.data = JSON.parse(row.data);
+      if (row.colors) { try { row.colors = JSON.parse(row.colors); } catch { row.colors = null; } }
       return res.json({ map: row });
     }
     const r = await db.query(
@@ -64,12 +65,12 @@ async function handleWorldmap(req, res, user, db) {
     return res.json({ maps: r.rows });
   }
   if (req.method === 'POST') {
-    const { name, data, width = 20, height = 16 } = req.body ?? {};
+    const { name, data, width = 20, height = 16, colors } = req.body ?? {};
     if (!name || !data) return res.status(400).json({ error: 'name and data required' });
     const r = await db.query(
-      `INSERT INTO world_maps (name, data, width, height, created_by)
-       VALUES ($1,$2,$3,$4,$5) RETURNING id, name, width, height, is_active, created_at`,
-      [name, JSON.stringify(data), width, height, user.sub]
+      `INSERT INTO world_maps (name, data, width, height, created_by, colors)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, name, width, height, is_active, created_at`,
+      [name, JSON.stringify(data), width, height, user.sub, colors ? JSON.stringify(colors) : null]
     );
     return res.status(201).json({ map: r.rows[0] });
   }

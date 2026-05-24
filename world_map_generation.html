@@ -232,11 +232,19 @@ const TIERS = [
 ];
 const BG_COLOR = '#0a0c1e';
 
-// Palette: 0=background, 1-6=TIERS[0-5]
+// Default display colors per tier (one customizable color per difficulty)
+const DEFAULT_TIER_COLORS = Object.fromEntries(TIERS.map(t => [t.id, t.color]));
+let tierColors = { ...DEFAULT_TIER_COLORS };
+
+// Palette: 0=background, 1-6=TIERS[0-5] — colors kept in sync with tierColors
 const PALETTE = [
-  { val: 0, label: 'BG',     color: BG_COLOR },
+  { val: 0, label: 'BG', color: BG_COLOR },
   ...TIERS.map((t, i) => ({ val: i + 1, label: t.label, color: t.color })),
 ];
+
+function syncPalette() {
+  TIERS.forEach((t, i) => { PALETTE[i + 1].color = tierColors[t.id] || t.color; });
+}
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 const Auth = {
@@ -420,13 +428,23 @@ window.addEventListener('resize', () => {
 
 // ── Palette UI ───────────────────────────────────────────────────────────────
 function buildPalette() {
+  syncPalette();
   const el = document.getElementById('palette');
-  el.innerHTML = PALETTE.map((p, i) => `
-    <div class="pal-item${i === selectedPal ? ' selected' : ''}" onclick="selectPal(${i})" id="pal-${i}">
-      <div class="pal-swatch" style="background:${p.color};border:1px solid rgba(255,255,255,.2)"></div>
-      <span>${p.label}</span>
-    </div>
-  `).join('');
+  el.innerHTML = PALETTE.map((p, i) => {
+    const colorInput = i > 0
+      ? `<input type="color" value="${p.color}" data-pal-idx="${i}"
+           title="Change ${p.label} display color"
+           style="width:20px;height:18px;padding:1px 2px;border:1px solid rgba(255,255,255,.15);background:#0a1428;cursor:pointer;border-radius:2px;flex-shrink:0"
+           onclick="event.stopPropagation()" onchange="onTierColorChange(this)">`
+      : '';
+    return `
+      <div class="pal-item${i === selectedPal ? ' selected' : ''}" onclick="selectPal(${i})" id="pal-${i}">
+        <div class="pal-swatch" style="background:${p.color};border:1px solid rgba(255,255,255,.2)"></div>
+        <span style="flex:1">${p.label}</span>
+        ${colorInput}
+      </div>
+    `;
+  }).join('');
 }
 
 function selectPal(i) {
@@ -435,6 +453,18 @@ function selectPal(i) {
     el.classList.toggle('selected', idx === i);
   });
   document.getElementById('paint-mode-label').textContent = `— ${PALETTE[i].label}`;
+}
+
+function onTierColorChange(input) {
+  const palIdx = parseInt(input.dataset.palIdx);
+  if (palIdx < 1 || palIdx > 6) return;
+  const col = input.value;
+  PALETTE[palIdx].color = col;
+  tierColors[TIERS[palIdx - 1].id] = col;
+  const swatch = document.querySelector(`#pal-${palIdx} .pal-swatch`);
+  if (swatch) swatch.style.background = col;
+  drawGrid();
+  updateStatusCounts();
 }
 
 // ── Image processing ─────────────────────────────────────────────────────────
@@ -554,7 +584,7 @@ function generateMap() {
       const palIdx = clusterToPal[ci];
       const hex = '#' + c.map(v => Math.round(v).toString(16).padStart(2,'0')).join('');
       PALETTE[palIdx].color = hex;
-      // keep label, update swatch only
+      if (palIdx > 0) tierColors[TIERS[palIdx - 1].id] = hex;
     });
 
     // Build grid (map image pixels to grid cells with majority voting)
@@ -641,9 +671,7 @@ function kmeansRun(points, initCenters, maxIter) {
 function clearGrid() {
   if (!gridData) { initGrid(WORLD_W, WORLD_H); return; }
   gridData.fill(0);
-  // Reset palette to defaults
-  PALETTE[0].color = BG_COLOR;
-  TIERS.forEach((t, i) => { PALETTE[i+1].color = t.color; });
+  tierColors = { ...DEFAULT_TIER_COLORS };
   buildPalette();
   drawGrid();
   updateStatusCounts();
@@ -665,7 +693,8 @@ function exportTxt() {
     for (let x = 0; x < gridW; x++) row.push(gridData[y * gridW + x]);
     rows.push(row.join(' '));
   }
-  const txt = `# MineSweepingWorld map: ${gridW}x${gridH}\n# 0=BG 1=EASY 2=NORMAL 3=MEDIUM 4=HARD 5=EXPERT 6=MASTER\n` + rows.join('\n');
+  const colorLine = '# COLORS ' + TIERS.map(t => `${t.id}=${tierColors[t.id] || t.color}`).join(' ');
+  const txt = `# MineSweepingWorld map: ${gridW}x${gridH}\n# 0=BG 1=EASY 2=NORMAL 3=MEDIUM 4=HARD 5=EXPERT 6=MASTER\n${colorLine}\n` + rows.join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
   a.download = `world_map_${gridW}x${gridH}.txt`;
@@ -677,15 +706,29 @@ function importTxt(e) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
-    const lines = ev.target.result.split('\n').filter(l => l.trim() && !l.startsWith('#'));
+    const allLines = ev.target.result.split('\n');
+    // Parse COLORS comment if present
+    const colorLine = allLines.find(l => /^#\s*COLORS\b/.test(l));
+    if (colorLine) {
+      const newColors = { ...DEFAULT_TIER_COLORS };
+      colorLine.replace(/^#\s*COLORS\s*/, '').trim().split(/\s+/).forEach(part => {
+        const eq = part.indexOf('=');
+        if (eq > 0) {
+          const k = part.slice(0, eq), v = part.slice(eq + 1);
+          if (k in newColors && /^#[0-9a-fA-F]{6}$/.test(v)) newColors[k] = v;
+        }
+      });
+      tierColors = newColors;
+    } else {
+      tierColors = { ...DEFAULT_TIER_COLORS };
+    }
+    buildPalette();
+
+    const lines = allLines.filter(l => l.trim() && !l.startsWith('#'));
     const rows = lines.map(l => l.trim().split(/\s+/).map(Number));
     const h = rows.length;
     const w = Math.max(...rows.map(r => r.length));
     if (h < 1 || w < 1) return alert('Invalid TXT format');
-    // Reset palette to defaults since we lost quantized colors
-    PALETTE[0].color = BG_COLOR;
-    TIERS.forEach((t, i) => { PALETTE[i+1].color = t.color; });
-    buildPalette();
     initGrid(w, h);
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
@@ -719,7 +762,7 @@ async function saveMap() {
   try {
     await apiFetch('/admin?resource=worldmap', {
       method: 'POST',
-      body: JSON.stringify({ name, data: Array.from(gridData), width: gridW, height: gridH }),
+      body: JSON.stringify({ name, data: Array.from(gridData), width: gridW, height: gridH, colors: tierColors }),
     });
     btn.textContent = '✓ Saved';
     status.textContent = 'Map saved successfully';
@@ -812,8 +855,10 @@ async function loadMapToEditor(id) {
   try {
     const { map: mapData } = await apiFetch(`/admin?resource=worldmap&id=${id}`);
     if (!mapData) return;
-    PALETTE[0].color = BG_COLOR;
-    TIERS.forEach((t, i) => { PALETTE[i+1].color = t.color; });
+    // Restore saved colors or fall back to defaults
+    tierColors = (mapData.colors && typeof mapData.colors === 'object')
+      ? { ...DEFAULT_TIER_COLORS, ...mapData.colors }
+      : { ...DEFAULT_TIER_COLORS };
     buildPalette();
     initGrid(mapData.width, mapData.height);
     const data = Array.isArray(mapData.data) ? mapData.data : JSON.parse(mapData.data);
@@ -861,6 +906,7 @@ function updateStatusCounts() {
     return;
   }
   container.innerHTML = TIERS.map((t, i) => {
+    const col   = tierColors[t.id] || t.color;
     const cnt   = counts[i + 1];
     const pct   = nonBg > 0 ? (cnt / nonBg * 100) : 0;
     const rec   = TIER_RECOMMENDED[i];
@@ -868,10 +914,10 @@ function updateStatusCounts() {
     const diffColor = diff > 3 ? '#f8a' : diff < -3 ? '#8af' : '#6a6';
     const barW  = Math.round(pct);
     return `<div class="tier-stat-row">
-      <span class="tier-stat-swatch" style="background:${t.color}"></span>
+      <span class="tier-stat-swatch" style="background:${col}"></span>
       <span class="tier-stat-label">${t.label}</span>
       <div class="tier-stat-bar-wrap">
-        <div class="tier-stat-bar" style="width:${barW}%;background:${t.color}"></div>
+        <div class="tier-stat-bar" style="width:${barW}%;background:${col}"></div>
       </div>
       <span class="tier-stat-pct" style="color:${diffColor}">${pct.toFixed(1)}%</span>
       <span class="tier-stat-ref">${rec}%</span>

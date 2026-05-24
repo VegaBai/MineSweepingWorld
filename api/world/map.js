@@ -96,10 +96,11 @@ export default async function handler(req, res) {
   }
 
   const r = await db.query(
-    'SELECT id, name, data, width, height, week_start FROM world_maps WHERE is_active=TRUE LIMIT 1'
+    'SELECT id, name, data, width, height, week_start, colors FROM world_maps WHERE is_active=TRUE LIMIT 1'
   );
   if (!r.rows.length) return res.json({ map: null });
   const row = r.rows[0];
   row.data = JSON.parse(row.data);
+  if (row.colors) { try { row.colors = JSON.parse(row.colors); } catch { row.colors = null; } }
   res.json({ map: row });
 }

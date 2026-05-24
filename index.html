@@ -15,25 +15,25 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #world-hud .dim{color:#6a8aaa}
 #active-banner{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(20,50,130,.95);border:1.5px solid #3a6ad8;border-radius:8px;padding:10px 24px;font-size:14px;cursor:pointer;display:none;white-space:nowrap;transition:background .15s}
 #active-banner:hover{background:rgba(40,70,170,.95)}
-#game-screen{position:fixed;inset:0;display:none;flex-direction:column;background:#0e2640}
-#game-header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:#080e22;border-bottom:1px solid #1a2440;flex-shrink:0;min-height:50px}
-.btn{background:#111c38;color:#8ab;border:1px solid #1e3050;padding:6px 14px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:13px;transition:background .12s}
-.btn:hover{background:#1c2d54;color:#ace}
-.btn.danger{color:#f88;border-color:#4a2020}
-.btn.danger:hover{background:#2a1818;color:#faa}
-.sbox{background:#0a1220;border:1px solid #1a2838;border-radius:4px;padding:3px 10px;font-size:15px;font-weight:bold;letter-spacing:1px;min-width:58px;text-align:center}
-.slbl{font-size:10px;color:#445;margin-right:4px;letter-spacing:.5px}
+#game-screen{position:fixed;inset:0;display:none;flex-direction:column;background:#040c18}
+#game-header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:#05101e;border-bottom:1px solid #0a2040;flex-shrink:0;min-height:50px}
+.btn{background:#07111f;color:#6aaccc;border:1px solid #0f2a4a;border-left:2px solid #1a5a8a;padding:6px 14px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:13px;transition:background .12s,border-color .12s;letter-spacing:.3px}
+.btn:hover{background:#0d1e38;color:#8ad4f0;border-left-color:#2a8aca}
+.btn.danger{color:#f88;border-color:#3a1818;border-left-color:#7a2a2a}
+.btn.danger:hover{background:#1a0c0c;color:#faa;border-left-color:#aa3030}
+.sbox{background:#030810;border:1px solid #0a2030;border-radius:3px;padding:3px 10px;font-size:15px;font-weight:bold;letter-spacing:1.5px;min-width:58px;text-align:center;color:#00c8ff;text-shadow:0 0 8px rgba(0,200,255,.5)}
+.slbl{font-size:10px;color:#2a5070;margin-right:4px;letter-spacing:.8px;text-transform:uppercase}
 #game-canvas-wrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:10px}
 #game-canvas{image-rendering:pixelated;cursor:crosshair}
-#result-overlay{position:fixed;inset:0;background:rgba(0,0,8,.78);display:none;align-items:center;justify-content:center;z-index:50;backdrop-filter:blur(4px)}
-#result-box{background:#080e22;border:2px solid #333;border-radius:12px;padding:36px 48px;text-align:center;min-width:320px}
-#result-box.win{border-color:#2a7a2a}
-#result-box.lose{border-color:#7a2a2a}
-#result-title{font-size:34px;font-weight:bold;margin-bottom:10px}
-.win #result-title{color:#4ae84a}
-.lose #result-title{color:#e84a4a}
-#result-info{color:#556;font-size:14px;margin-bottom:24px;line-height:1.8}
-#result-info strong{color:#8ab}
+#result-overlay{position:fixed;inset:0;background:rgba(0,0,8,.82);display:none;align-items:center;justify-content:center;z-index:50;backdrop-filter:blur(6px)}
+#result-box{background:#040c18;border:1px solid #0f2a4a;border-radius:8px;padding:36px 48px;text-align:center;min-width:320px;box-shadow:0 0 40px rgba(0,80,160,.25)}
+#result-box.win{border-color:#00884a;box-shadow:0 0 40px rgba(0,160,80,.2)}
+#result-box.lose{border-color:#aa2020;box-shadow:0 0 40px rgba(180,30,30,.2)}
+#result-title{font-size:34px;font-weight:bold;margin-bottom:10px;letter-spacing:2px}
+.win #result-title{color:#00ff88;text-shadow:0 0 20px rgba(0,255,100,.4)}
+.lose #result-title{color:#ff4444;text-shadow:0 0 20px rgba(255,50,50,.4)}
+#result-info{color:#3a6080;font-size:14px;margin-bottom:24px;line-height:1.8}
+#result-info strong{color:#00c8ff}
 #result-btns{display:flex;gap:12px;justify-content:center}
 #toast{position:fixed;top:58px;left:50%;transform:translateX(-50%);background:rgba(120,40,40,.92);border:1px solid #a44;border-radius:6px;padding:7px 20px;font-size:13px;pointer-events:none;opacity:0;transition:opacity .3s;z-index:100;white-space:nowrap}
 #world-tooltip{position:fixed;display:none;background:rgba(8,14,34,.96);border:1px solid #2a4070;border-radius:6px;padding:8px 14px;font-size:12px;pointer-events:none;z-index:20;line-height:2;white-space:nowrap}
@@ -289,6 +289,14 @@ let WORLD_W = 20, WORLD_H = 16;
 // Active custom world map fetched from server (null = use procedural hash)
 let customWorldMap = null; // { width, height, data: Uint8Array }
 
+// Per-map custom display colors: { easy:'#...', normal:'#...', ... } or null
+let customTierColors = null;
+
+// Returns the idle/main display color for a tier (custom override or default)
+function getIdleColor(tier) {
+  return (customTierColors && customTierColors[tier.id]) || tier.idle;
+}
+
 function applyWorldDimensions(w, h) {
   WORLD_W = w; WORLD_H = h;
   // Re-fit camera to show the whole world
@@ -310,12 +318,14 @@ async function fetchActiveWorldMap() {
     const {map}=data;
     if(!map){
       customWorldMap=null;
+      customTierColors=null;
       applyWorldDimensions(20,16);
       drawWorld();
       buildLegend();
       return;
     }
     customWorldMap={width:map.width,height:map.height,data:new Uint8Array(map.data)};
+    customTierColors=(map.colors && typeof map.colors==='object') ? map.colors : null;
     applyWorldDimensions(map.width,map.height);
     drawWorld();
     buildLegend();
@@ -345,7 +355,7 @@ function gridTier(gx, gy) {
 
 // ── World constants ────────────────────────────────────────────────────────
 const TILE = 70, TGAP = 3, TILE2 = TILE + TGAP;
-const NCOL = ['','#0033cc','#007700','#cc0000','#00008b','#880000','#008888','#333333','#888888'];
+const NCOL = ['','#00c8ff','#00e878','#ff5040','#c066ff','#ff9844','#00ffdd','#d8d8d8','#ff44aa'];
 
 // ── App State ──────────────────────────────────────────────────────────────
 let screen = 'world';
@@ -531,7 +541,7 @@ function drawWorld() {
     if      (st==='won')    fill=tier.won;
     else if (st==='lost')   fill=tier.lost;
     else if (st==='active') fill=tier.dot;
-    else                    fill=tier.idle;
+    else                    fill=getIdleColor(tier);
 
     ctx.fillStyle=fill; ctx.fillRect(sx,sy,tw,th);
 
@@ -590,7 +600,7 @@ function drawGame() {
   const g=store.get(viewKey); if (!g) return;
   const {rows,cols}=g;
   const ctx=gCtx;
-  ctx.fillStyle='#0e2640'; ctx.fillRect(0,0,gCvs.width,gCvs.height);
+  ctx.fillStyle='#040c18'; ctx.fillRect(0,0,gCvs.width,gCvs.height);
   const over=g.status==='lost'||g.status==='won';
 
   for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) {
@@ -600,34 +610,52 @@ function drawGame() {
     const mine=g.mines[i], hit=i===g.hitIdx;
     const hov=r===hoverR&&c===hoverC&&!over&&g.status==='active'&&!rev;
 
-    // Revealed: light sky-blue. Unrevealed: dark slate-blue (clearly distinct)
+    // Revealed: mid-teal panel — clearly distinct from near-black unrevealed
     let bg;
-    if (rev)  bg=mine?(hit?'#c03030':'#c8d8e8'):'#b8d4ec';
-    else      bg=flag?'#183a58':(hov?'#2a5a82':'#1e4868');
+    if (rev)  bg=mine?(hit?'#1e0606':'#1a3d5c'):'#1a3d5c';
+    else      bg=flag?'#071828':(hov?'#0e2840':'#07141f');
     ctx.fillStyle=bg; ctx.fillRect(x,y,cs,cs);
 
     if (!rev) {
-      // 3D raised edge: bright top-left, dark bottom-right
-      ctx.fillStyle=hov?'#3a6a98':'#2a5878';
+      // Circuit-board edge: cyan top/left accent, black bottom/right shadow
+      const edgeAlpha = hov ? 0.55 : 0.28;
+      ctx.fillStyle=`rgba(0,180,255,${edgeAlpha})`;
       ctx.fillRect(x,y,cs,1); ctx.fillRect(x,y,1,cs);
-      ctx.fillStyle='#0c2236';
+      ctx.fillStyle='rgba(0,0,0,0.7)';
       ctx.fillRect(x,y+cs-1,cs,1); ctx.fillRect(x+cs-1,y,1,cs);
+      // Corner bracket marks (circuit feel) when cell is big enough
+      if (cs>=10) {
+        const bk=Math.max(2,Math.round(cs*0.22));
+        ctx.fillStyle=`rgba(0,200,255,${hov?0.8:0.4})`;
+        ctx.fillRect(x+2,y+2,bk,1); ctx.fillRect(x+2,y+2,1,bk);
+        ctx.fillRect(x+cs-2-bk,y+2,bk,1); ctx.fillRect(x+cs-3,y+2,1,bk);
+        ctx.fillRect(x+2,y+cs-3,bk,1); ctx.fillRect(x+2,y+cs-2-bk,1,bk);
+        ctx.fillRect(x+cs-2-bk,y+cs-3,bk,1); ctx.fillRect(x+cs-3,y+cs-2-bk,1,bk);
+      }
 
       if (flag) {
-        ctx.fillStyle='#e03020';
+        // Tech flag: cyan diamond marker on thin pole
+        const cx2=x+Math.round(cs*0.5), pTop=y+Math.round(cs*0.1), pBot=y+cs-Math.round(cs*0.15);
+        ctx.fillStyle='#1a6a88';
+        ctx.fillRect(cx2-Math.max(1,Math.round(cs*0.05)),pTop,Math.max(1,Math.round(cs*0.07)),pBot-pTop);
+        const dr=Math.max(3,Math.round(cs*0.27)), dmy=y+Math.round(cs*0.34);
+        ctx.fillStyle='#00c8ff';
         ctx.beginPath();
-        const fx=x+Math.round(cs*0.25), fy=y+Math.round(cs*0.12);
-        const fw=Math.max(4,Math.round(cs*0.38)), fh=Math.max(3,Math.round(cs*0.32));
-        ctx.moveTo(fx,fy); ctx.lineTo(fx+fw,fy+fh/2); ctx.lineTo(fx,fy+fh);
+        ctx.moveTo(cx2,dmy-dr); ctx.lineTo(cx2+dr,dmy);
+        ctx.lineTo(cx2,dmy+dr); ctx.lineTo(cx2-dr,dmy);
         ctx.closePath(); ctx.fill();
-        ctx.fillStyle='#ccc';
-        ctx.fillRect(fx-Math.round(cs*0.07),fy,Math.max(1,Math.round(cs*0.07)),cs-Math.round(cs*0.15));
+        ctx.fillStyle='rgba(255,255,255,0.55)';
+        ctx.beginPath(); ctx.arc(cx2,dmy,Math.max(1,Math.round(cs*0.09)),0,Math.PI*2); ctx.fill();
       } else if (mine&&over) {
-        drawMineIcon(ctx,x+cs/2,y+cs/2,'#884040');
+        drawMineIcon(ctx,x+cs/2,y+cs/2,'#cc3020');
       }
     } else {
+      // Thin border on revealed cells
+      ctx.strokeStyle='rgba(0,160,230,0.18)';
+      ctx.lineWidth=0.5;
+      ctx.strokeRect(x+0.5,y+0.5,cs-1,cs-1);
       if (mine) {
-        drawMineIcon(ctx,x+cs/2,y+cs/2,hit?'#dd2222':'#993333');
+        drawMineIcon(ctx,x+cs/2,y+cs/2,hit?'#ff2a2a':'#cc3020');
       } else if (g.nums[i]>0) {
         ctx.fillStyle=NCOL[g.nums[i]];
         ctx.font=`bold ${Math.max(10,cs-3)}px Consolas,monospace`;
@@ -639,19 +667,35 @@ function drawGame() {
 }
 
 function drawMineIcon(ctx,cx,cy,col) {
-  const r=cs/2-2;
-  ctx.fillStyle=col;
-  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle=col; ctx.lineWidth=1;
-  for (let a=0;a<8;a++) {
-    const ang=a/8*Math.PI*2;
+  const r=Math.max(3,cs/2-2);
+  const lw=Math.max(1,r*0.18);
+  // Outer glow ring
+  ctx.save();
+  ctx.globalAlpha=0.35;
+  ctx.strokeStyle=col; ctx.lineWidth=lw*1.5;
+  ctx.beginPath(); ctx.arc(cx,cy,r*1.25,0,Math.PI*2); ctx.stroke();
+  ctx.globalAlpha=1;
+  // 4 crosshair arms extending outward
+  ctx.strokeStyle=col; ctx.lineWidth=lw;
+  const armGap=r*0.18, armLen=r*0.55;
+  for (let a=0;a<4;a++) {
+    const ang=a/4*Math.PI*2;
+    const cos=Math.cos(ang), sin=Math.sin(ang);
     ctx.beginPath();
-    ctx.moveTo(cx+Math.cos(ang)*(r-1),cy+Math.sin(ang)*(r-1));
-    ctx.lineTo(cx+Math.cos(ang)*(r+2.5),cy+Math.sin(ang)*(r+2.5));
+    ctx.moveTo(cx+cos*(r+armGap), cy+sin*(r+armGap));
+    ctx.lineTo(cx+cos*(r+armGap+armLen), cy+sin*(r+armGap+armLen));
     ctx.stroke();
   }
-  ctx.fillStyle='rgba(255,255,255,.25)';
-  ctx.beginPath(); ctx.arc(cx-r*.28,cy-r*.28,r*.32,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+  // Inner filled circle
+  ctx.fillStyle=col;
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+  // Inner ring cutout
+  ctx.strokeStyle='rgba(0,0,0,0.45)'; ctx.lineWidth=Math.max(1,r*0.25);
+  ctx.beginPath(); ctx.arc(cx,cy,r*0.45,0,Math.PI*2); ctx.stroke();
+  // Highlight
+  ctx.fillStyle='rgba(255,255,255,0.35)';
+  ctx.beginPath(); ctx.arc(cx-r*.3,cy-r*.3,r*.28,0,Math.PI*2); ctx.fill();
 }
 
 // ── Timer ──────────────────────────────────────────────────────────────────
@@ -1193,7 +1237,8 @@ function buildLegend() {
   TIERS.forEach(t=>{
     const s=document.createElement('div');
     s.style.cssText=`display:flex;align-items:center;gap:4px;font-size:11px;white-space:nowrap`;
-    s.innerHTML=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${t.dot}"></span>`+
+    const swatchColor = getIdleColor(t);
+    s.innerHTML=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${swatchColor}"></span>`+
                 `<span style="color:${t.text}">${t.label}</span>`+
                 `<span id="leg-cnt-${t.id}" style="color:#5a8aaa;font-size:10px"></span>`;
     el.appendChild(s);

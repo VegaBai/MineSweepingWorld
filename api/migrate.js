@@ -129,6 +129,9 @@ CREATE TABLE IF NOT EXISTS map_week_snapshots (
 -- Migration 007: user profile
 ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar       TEXT DEFAULT 'default';
+
+-- Migration 008: world map display colors
+ALTER TABLE world_maps ADD COLUMN IF NOT EXISTS colors TEXT;
 `;
 
 // One-time migration — protect with a secret header
