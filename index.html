@@ -292,9 +292,23 @@ let customWorldMap = null; // { width, height, data: Uint8Array }
 // Per-map custom display colors: { easy:'#...', normal:'#...', ... } or null
 let customTierColors = null;
 
-// Returns the idle/main display color for a tier (custom override or default)
+// Blend hex color toward white by factor t (0=original, 1=white)
+function lightenColor(hex, t) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgb(${Math.round(r+(255-r)*t)},${Math.round(g+(255-g)*t)},${Math.round(b+(255-b)*t)})`;
+}
+
+// Won = full custom pixel-art color (the "revealed" true color)
+function getWonColor(tier) {
+  return (customTierColors && customTierColors[tier.id]) || tier.won;
+}
+
+// Idle = custom color lightened ~45% (not yet revealed); falls back to tier.idle
 function getIdleColor(tier) {
-  return (customTierColors && customTierColors[tier.id]) || tier.idle;
+  if (customTierColors && customTierColors[tier.id])
+    return lightenColor(customTierColors[tier.id], 0.45);
+  return tier.idle;
 }
 
 function applyWorldDimensions(w, h) {
@@ -538,7 +552,7 @@ function drawWorld() {
     }
 
     let fill;
-    if      (st==='won')    fill=tier.won;
+    if      (st==='won')    fill=getWonColor(tier);
     else if (st==='lost')   fill=tier.lost;
     else if (st==='active') fill=tier.dot;
     else                    fill=getIdleColor(tier);
@@ -1237,7 +1251,7 @@ function buildLegend() {
   TIERS.forEach(t=>{
     const s=document.createElement('div');
     s.style.cssText=`display:flex;align-items:center;gap:4px;font-size:11px;white-space:nowrap`;
-    const swatchColor = getIdleColor(t);
+    const swatchColor = getWonColor(t);
     s.innerHTML=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${swatchColor}"></span>`+
                 `<span style="color:${t.text}">${t.label}</span>`+
                 `<span id="leg-cnt-${t.id}" style="color:#5a8aaa;font-size:10px"></span>`;
