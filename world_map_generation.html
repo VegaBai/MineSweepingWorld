@@ -19,7 +19,7 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #layout{display:flex;flex:1;overflow:hidden}
 
 /* Sidebar */
-#sidebar{width:280px;flex-shrink:0;background:#07091a;border-right:1px solid #1a2a4a;display:flex;flex-direction:column;overflow-y:auto;padding:14px 12px;gap:14px}
+#sidebar{width:280px;flex-shrink:0;background:#07091a;border-right:1px solid #1a2a4a;display:flex;flex-direction:column;overflow-y:auto;padding:14px 12px;gap:14px;min-height:0}
 .panel{background:#080e22;border:1px solid #1a2a4a;border-radius:6px;padding:12px}
 .panel-title{font-size:10px;color:#446;letter-spacing:.6px;margin-bottom:10px}
 
@@ -89,6 +89,33 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 /* Spinner */
 .spinner{display:inline-block;width:12px;height:12px;border:2px solid #334;border-top-color:#8ab;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* HSV Color Picker */
+#hsv-popup{position:fixed;z-index:400;background:#080e22;border:1px solid #2a5aaa;border-radius:8px;padding:12px 14px;box-shadow:0 8px 40px rgba(0,0,0,.88);width:232px;display:none;user-select:none}
+#hsv-popup-title{font-size:10px;color:#446;letter-spacing:.6px;margin-bottom:9px}
+#hsv-sv-wrap{position:relative;margin-bottom:8px;line-height:0}
+#hsv-sv-canvas{display:block;border-radius:4px;cursor:crosshair;width:204px;height:164px}
+#hsv-sv-cursor{position:absolute;width:14px;height:14px;border-radius:50%;box-shadow:0 0 0 1.5px #000,0 0 0 3px #fff;transform:translate(-50%,-50%);pointer-events:none}
+#hsv-hue-wrap{position:relative;height:14px;margin-bottom:10px;line-height:0}
+#hsv-hue-canvas{display:block;border-radius:3px;width:204px;height:14px;cursor:pointer}
+#hsv-hue-thumb{position:absolute;width:6px;height:18px;top:-2px;border:2px solid #fff;border-radius:3px;box-shadow:0 1px 5px rgba(0,0,0,.8);transform:translateX(-50%);pointer-events:none}
+.hsv-inputs-row{display:flex;align-items:center;gap:5px;margin-bottom:8px;font-size:11px;color:#6a9ab8}
+.hsv-num{background:#0a1428;border:1px solid #1e3050;border-radius:3px;padding:3px 4px;color:#c8d8f0;font-family:inherit;font-size:11px;outline:none;width:44px;text-align:center}
+.hsv-num:focus{border-color:#3a70c0}
+.hsv-hex-row{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.hsv-hex-row span{font-size:11px;color:#6a9ab8}
+#hsv-hex-input{background:#0a1428;border:1px solid #1e3050;border-radius:3px;padding:3px 7px;color:#c8d8f0;font-family:'Consolas',monospace;font-size:12px;outline:none;width:76px;letter-spacing:.5px}
+#hsv-hex-input:focus{border-color:#3a70c0}
+.hsv-swatch{width:26px;height:20px;border-radius:3px;border:1px solid rgba(255,255,255,.15);flex-shrink:0}
+.hsv-arrow{color:#334;font-size:12px}
+.hsv-btn-row{display:flex;gap:8px}
+.hsv-btn{flex:1;padding:5px;font-size:11px;border-radius:4px;cursor:pointer;font-family:inherit;border:1px solid;transition:background .12s}
+#hsv-apply-btn{background:#1a3a1a;color:#6aaa6a;border-color:#2a6a2a}
+#hsv-apply-btn:hover{background:#1e4a1e}
+#hsv-cancel-btn{background:#0a1220;color:#8ab;border-color:#1e3050}
+#hsv-cancel-btn:hover{background:#111c38}
+.tier-color-btn{width:22px;height:18px;border-radius:2px;border:1px solid rgba(255,255,255,.2);cursor:pointer;flex-shrink:0;padding:0;outline:none;transition:border-color .12s}
+.tier-color-btn:hover{border-color:rgba(255,255,255,.5)}
 </style>
 </head>
 <body>
@@ -240,6 +267,35 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
       <span id="status-cell">—</span>
       <span id="status-counts"></span>
     </div>
+  </div>
+</div>
+
+<!-- HSV Color Picker Popup -->
+<div id="hsv-popup">
+  <div id="hsv-popup-title">TIER COLOR</div>
+  <div id="hsv-sv-wrap">
+    <canvas id="hsv-sv-canvas" width="204" height="164"></canvas>
+    <div id="hsv-sv-cursor"></div>
+  </div>
+  <div id="hsv-hue-wrap">
+    <canvas id="hsv-hue-canvas" width="204" height="14"></canvas>
+    <div id="hsv-hue-thumb"></div>
+  </div>
+  <div class="hsv-inputs-row">
+    <span>H</span><input id="hsv-h" type="number" class="hsv-num" min="0" max="360" oninput="onHsvNumChange()">
+    <span>S</span><input id="hsv-s" type="number" class="hsv-num" min="0" max="100" oninput="onHsvNumChange()">
+    <span>V</span><input id="hsv-v" type="number" class="hsv-num" min="0" max="100" oninput="onHsvNumChange()">
+  </div>
+  <div class="hsv-hex-row">
+    <span>#</span>
+    <input id="hsv-hex-input" type="text" maxlength="7" placeholder="rrggbb" oninput="onHsvHexChange()">
+    <div id="hsv-prev-old" class="hsv-swatch" title="原色"></div>
+    <span class="hsv-arrow">→</span>
+    <div id="hsv-prev-new" class="hsv-swatch" title="新色"></div>
+  </div>
+  <div class="hsv-btn-row">
+    <button id="hsv-apply-btn"  class="hsv-btn" onclick="applyHsvPicker()">✓ 应用</button>
+    <button id="hsv-cancel-btn" class="hsv-btn" onclick="cancelHsvPicker()">✕ 取消</button>
   </div>
 </div>
 
@@ -457,17 +513,16 @@ function buildPalette() {
   syncPalette();
   const el = document.getElementById('palette');
   el.innerHTML = PALETTE.map((p, i) => {
-    const colorInput = i > 0
-      ? `<input type="color" value="${p.color}" data-pal-idx="${i}"
-           title="Change ${p.label} display color"
-           style="width:20px;height:18px;padding:1px 2px;border:1px solid rgba(255,255,255,.15);background:#0a1428;cursor:pointer;border-radius:2px;flex-shrink:0"
-           onclick="event.stopPropagation()" onchange="onTierColorChange(this)">`
+    const colorBtn = i > 0
+      ? `<button class="tier-color-btn" style="background:${p.color}" data-pal-idx="${i}"
+           title="调整 ${p.label} 显示颜色"
+           onclick="event.stopPropagation();openHsvPicker(${i},this)"></button>`
       : '';
     return `
       <div class="pal-item${i === selectedPal ? ' selected' : ''}" onclick="selectPal(${i})" id="pal-${i}">
         <div class="pal-swatch" style="background:${p.color};border:1px solid rgba(255,255,255,.2)"></div>
         <span style="flex:1">${p.label}</span>
-        ${colorInput}
+        ${colorBtn}
       </div>
     `;
   }).join('');
@@ -481,17 +536,268 @@ function selectPal(i) {
   document.getElementById('paint-mode-label').textContent = `— ${PALETTE[i].label}`;
 }
 
-function onTierColorChange(input) {
-  const palIdx = parseInt(input.dataset.palIdx);
-  if (palIdx < 1 || palIdx > 6) return;
-  const col = input.value;
-  PALETTE[palIdx].color = col;
-  tierColors[TIERS[palIdx - 1].id] = col;
-  const swatch = document.querySelector(`#pal-${palIdx} .pal-swatch`);
-  if (swatch) swatch.style.background = col;
-  drawGrid();
-  updateStatusCounts();
+// ── HSV Color Picker ──────────────────────────────────────────────────────────
+const hsvPicker = {
+  palIdx: -1,        // which palette slot (1-6) is being edited
+  origColor: '',     // color before picker opened (for cancel)
+  origRefOpacity: null, // saved ref opacity (null = ref wasn't active)
+  h: 0, s: 100, v: 100,
+  svDrag: false, hueDrag: false,
+};
+
+// ── Color math ────────────────────────────────────────────────────────────────
+function hsvToRgb(h, s, v) {
+  s /= 100; v /= 100;
+  const f = n => { const k = (n + h / 60) % 6; return v * (1 - s * Math.max(0, Math.min(k, 4 - k, 1))); };
+  return [Math.round(f(5) * 255), Math.round(f(3) * 255), Math.round(f(1) * 255)];
 }
+
+function rgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  const s = max === 0 ? 0 : d / max, v = max;
+  if (d) {
+    if      (max === r) h = ((g - b) / d + 6) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else                h = (r - g) / d + 4;
+    h *= 60;
+  }
+  return [Math.round(h), Math.round(s * 100), Math.round(v * 100)];
+}
+
+function hexToRgbArr(hex) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map(c => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0')).join('');
+}
+
+// ── Canvas rendering ──────────────────────────────────────────────────────────
+function renderSvCanvas() {
+  const cvs = document.getElementById('hsv-sv-canvas');
+  const ctx = cvs.getContext('2d');
+  const W = cvs.width, H = cvs.height;
+
+  // Pure hue background
+  const [r, g, b] = hsvToRgb(hsvPicker.h, 100, 100);
+  ctx.fillStyle = `rgb(${r},${g},${b})`;
+  ctx.fillRect(0, 0, W, H);
+
+  // White left→right
+  const gw = ctx.createLinearGradient(0, 0, W, 0);
+  gw.addColorStop(0, 'rgba(255,255,255,1)');
+  gw.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gw; ctx.fillRect(0, 0, W, H);
+
+  // Black top→bottom
+  const gb = ctx.createLinearGradient(0, 0, 0, H);
+  gb.addColorStop(0, 'rgba(0,0,0,0)');
+  gb.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.fillStyle = gb; ctx.fillRect(0, 0, W, H);
+
+  // Cursor
+  const cx = (hsvPicker.s / 100) * W;
+  const cy = (1 - hsvPicker.v / 100) * H;
+  const cur = document.getElementById('hsv-sv-cursor');
+  cur.style.left = cx + 'px';
+  cur.style.top  = cy + 'px';
+}
+
+function renderHueBar() {
+  const cvs = document.getElementById('hsv-hue-canvas');
+  const ctx = cvs.getContext('2d');
+  const W = cvs.width, H = cvs.height;
+  const grd = ctx.createLinearGradient(0, 0, W, 0);
+  for (let i = 0; i <= 6; i++) grd.addColorStop(i / 6, `hsl(${i * 60},100%,50%)`);
+  ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
+  document.getElementById('hsv-hue-thumb').style.left = (hsvPicker.h / 360) * W + 'px';
+}
+
+function syncHsvUI() {
+  const { h, s, v } = hsvPicker;
+  document.getElementById('hsv-h').value = Math.round(h);
+  document.getElementById('hsv-s').value = Math.round(s);
+  document.getElementById('hsv-v').value = Math.round(v);
+  const hex = rgbToHex(...hsvToRgb(h, s, v));
+  document.getElementById('hsv-hex-input').value = hex;
+  document.getElementById('hsv-prev-new').style.background = hex;
+  renderSvCanvas();
+  renderHueBar();
+}
+
+// ── Live preview ──────────────────────────────────────────────────────────────
+function hsvLiveUpdate() {
+  if (hsvPicker.palIdx < 1) return;
+  const hex = rgbToHex(...hsvToRgb(hsvPicker.h, hsvPicker.s, hsvPicker.v));
+  PALETTE[hsvPicker.palIdx].color = hex;
+  tierColors[TIERS[hsvPicker.palIdx - 1].id] = hex;
+  // Update swatch & color button in palette UI
+  const palItem = document.getElementById(`pal-${hsvPicker.palIdx}`);
+  if (palItem) {
+    const sw = palItem.querySelector('.pal-swatch');
+    const cb = palItem.querySelector('.tier-color-btn');
+    if (sw) sw.style.background = hex;
+    if (cb) cb.style.background = hex;
+  }
+  document.getElementById('hsv-hex-input').value = hex;
+  document.getElementById('hsv-prev-new').style.background = hex;
+  drawGrid();
+}
+
+// ── Input handlers ────────────────────────────────────────────────────────────
+function onHsvNumChange() {
+  hsvPicker.h = Math.max(0, Math.min(360, parseInt(document.getElementById('hsv-h').value) || 0));
+  hsvPicker.s = Math.max(0, Math.min(100, parseInt(document.getElementById('hsv-s').value) || 0));
+  hsvPicker.v = Math.max(0, Math.min(100, parseInt(document.getElementById('hsv-v').value) || 0));
+  hsvLiveUpdate();
+  renderSvCanvas();
+  renderHueBar();
+}
+
+function onHsvHexChange() {
+  let hex = document.getElementById('hsv-hex-input').value.trim();
+  if (!hex.startsWith('#')) hex = '#' + hex;
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+  const [r, g, b] = hexToRgbArr(hex);
+  [hsvPicker.h, hsvPicker.s, hsvPicker.v] = rgbToHsv(r, g, b);
+  document.getElementById('hsv-h').value = Math.round(hsvPicker.h);
+  document.getElementById('hsv-s').value = Math.round(hsvPicker.s);
+  document.getElementById('hsv-v').value = Math.round(hsvPicker.v);
+  hsvLiveUpdate();
+  renderSvCanvas();
+  renderHueBar();
+}
+
+// ── Drag interactions ─────────────────────────────────────────────────────────
+const _svCvs  = document.getElementById('hsv-sv-canvas');
+const _hueCvs = document.getElementById('hsv-hue-canvas');
+
+function _svFromEvent(e) {
+  const r = _svCvs.getBoundingClientRect();
+  hsvPicker.s = Math.max(0, Math.min(100, (e.clientX - r.left) / r.width  * 100));
+  hsvPicker.v = Math.max(0, Math.min(100, (1 - (e.clientY - r.top) / r.height) * 100));
+  document.getElementById('hsv-s').value = Math.round(hsvPicker.s);
+  document.getElementById('hsv-v').value = Math.round(hsvPicker.v);
+  hsvLiveUpdate();
+  renderSvCanvas();
+}
+
+function _hueFromEvent(e) {
+  const r = _hueCvs.getBoundingClientRect();
+  hsvPicker.h = Math.max(0, Math.min(360, (e.clientX - r.left) / r.width * 360));
+  document.getElementById('hsv-h').value = Math.round(hsvPicker.h);
+  hsvLiveUpdate();
+  renderSvCanvas();
+  renderHueBar();
+}
+
+_svCvs.addEventListener('mousedown',  e => { hsvPicker.svDrag  = true; _svFromEvent(e);  e.preventDefault(); });
+_hueCvs.addEventListener('mousedown', e => { hsvPicker.hueDrag = true; _hueFromEvent(e); e.preventDefault(); });
+
+document.addEventListener('mousemove', e => {
+  if (hsvPicker.svDrag)  _svFromEvent(e);
+  if (hsvPicker.hueDrag) _hueFromEvent(e);
+});
+document.addEventListener('mouseup', () => { hsvPicker.svDrag = false; hsvPicker.hueDrag = false; });
+
+// ── Open / close ──────────────────────────────────────────────────────────────
+function openHsvPicker(palIdx, btn) {
+  // If same slot re-clicked, just toggle closed
+  if (hsvPicker.palIdx === palIdx) { cancelHsvPicker(); return; }
+
+  // If a different slot was being edited, silently keep those changes
+  if (hsvPicker.palIdx >= 0) {
+    hsvPicker.palIdx = -1; // mark as closed without restoring opacity
+    document.getElementById('hsv-popup').style.display = 'none';
+  }
+
+  hsvPicker.palIdx    = palIdx;
+  hsvPicker.origColor = PALETTE[palIdx].color;
+
+  // Temporarily set reference image opacity to 100% while picking
+  if (refImg.show && imageLoaded) {
+    hsvPicker.origRefOpacity = refImg.opacity;
+    refImg.opacity = 100;
+    drawGrid();
+  } else {
+    hsvPicker.origRefOpacity = null;
+  }
+
+  // Initialise from current color
+  const [r, g, b] = hexToRgbArr(PALETTE[palIdx].color);
+  [hsvPicker.h, hsvPicker.s, hsvPicker.v] = rgbToHsv(r, g, b);
+
+  document.getElementById('hsv-popup-title').textContent = `TIER COLOR — ${TIERS[palIdx - 1].label}`;
+  document.getElementById('hsv-prev-old').style.background = PALETTE[palIdx].color;
+
+  syncHsvUI();
+  _positionHsvPopup(btn);
+  document.getElementById('hsv-popup').style.display = 'block';
+}
+
+function _positionHsvPopup(anchor) {
+  const popup = document.getElementById('hsv-popup');
+  popup.style.visibility = 'hidden';
+  popup.style.display = 'block';
+  const pw = popup.offsetWidth, ph = popup.offsetHeight;
+  popup.style.display = 'none';
+  popup.style.visibility = '';
+
+  const rect = anchor.getBoundingClientRect();
+  let left = rect.right + 10;
+  if (left + pw > window.innerWidth - 6) left = rect.left - pw - 10;
+  let top  = rect.top;
+  if (top  + ph > window.innerHeight - 6) top = window.innerHeight - ph - 6;
+  popup.style.left = Math.max(6, left) + 'px';
+  popup.style.top  = Math.max(6, top)  + 'px';
+}
+
+function _restoreRefOpacity() {
+  if (hsvPicker.origRefOpacity !== null) {
+    refImg.opacity = hsvPicker.origRefOpacity;
+    document.getElementById('ref-opacity').value = hsvPicker.origRefOpacity;
+    hsvPicker.origRefOpacity = null;
+    if (refImg.show) drawGrid();
+  }
+}
+
+function applyHsvPicker() {
+  _restoreRefOpacity();
+  updateStatusCounts();
+  document.getElementById('hsv-popup').style.display = 'none';
+  hsvPicker.palIdx = -1;
+}
+
+function cancelHsvPicker() {
+  const { palIdx, origColor } = hsvPicker;
+  if (palIdx > 0) {
+    PALETTE[palIdx].color = origColor;
+    tierColors[TIERS[palIdx - 1].id] = origColor;
+    const palItem = document.getElementById(`pal-${palIdx}`);
+    if (palItem) {
+      const sw = palItem.querySelector('.pal-swatch');
+      const cb = palItem.querySelector('.tier-color-btn');
+      if (sw) sw.style.background = origColor;
+      if (cb) cb.style.background = origColor;
+    }
+    drawGrid();
+  }
+  _restoreRefOpacity();
+  document.getElementById('hsv-popup').style.display = 'none';
+  hsvPicker.palIdx = -1;
+}
+
+// Close picker when clicking outside it
+document.addEventListener('mousedown', e => {
+  const popup = document.getElementById('hsv-popup');
+  if (popup.style.display === 'none') return;
+  if (popup.contains(e.target)) return;
+  if (e.target.classList.contains('tier-color-btn')) return; // let onclick handle
+  applyHsvPicker(); // outside click = apply & close
+});
 
 // ── Swap difficulties ─────────────────────────────────────────────────────────
 let swapStatusTO = null;
