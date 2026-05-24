@@ -1076,3 +1076,151 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar       TEXT DEFAULT 'default';
 - 登录后（`setTokens` 调用后）和页面加载时，自动调用 `GET /profile?resource=profile` 取回 display_name 并同步
 
 排行榜（`/api/leaderboard/index.js`）和周榜（`/api/illuminate.js weekstats`）均改用 `COALESCE(display_name, username)` 作为展示名称。
+---
+
+## v1.1 — 世界地图自定义颜色系统
+
+### v1.1.1 每张地图独立难度颜色（2026-05-24）
+
+**需求：** Admin 可为每张世界地图的每种难度单独设置显示颜色，保存后可随图复现，不影响游戏逻辑。
+
+**数据库：**
+- `api/migrate.js` Migration 008：`ALTER TABLE world_maps ADD COLUMN IF NOT EXISTS colors TEXT`
+- 存储格式：JSON 字符串 `{"easy":"#…","normal":"#…","medium":"#…","hard":"#…","expert":"#…","master":"#…"}`
+
+**后端接口：**
+- `api/admin.js` GET 单图：SELECT 增加 `colors`，返回前 `JSON.parse`
+- `api/admin.js` POST 保存：接收 `colors` 字段并 `JSON.stringify` 存库
+- `api/world/map.js` GET 激活图：SELECT 增加 `colors`，`JSON.parse` 后随 map 对象返回给客户端
+
+**编辑器（world_map_generation.html）：**
+- 新增 `DEFAULT_TIER_COLORS`（与 TIERS 颜色一致）和 `tierColors` 状态变量
+- `syncPalette()`：将 `tierColors` 同步到 `PALETTE[1..6].color`
+- 调色板每个难度项右侧增加彩色小方块按钮，点击打开自定义 HSV 取色器（见 v1.0.3）
+- **导出 TXT**：注释行追加 `# COLORS easy=#… normal=#… …`
+- **导入 TXT**：解析 `# COLORS` 注释行恢复颜色；无该行则重置为默认色
+- **保存到数据库**：请求体附带 `colors: tierColors`
+- **从数据库加载**：读取 `mapData.colors`，合并到 `tierColors` 并重建调色板
+- **图像量化后**：将量化中心色同步写回 `tierColors`
+- **Clear All**：重置 `tierColors` 为默认值
+- **Tier Distribution 面板**：横条颜色改为读取 `tierColors[t.id]`
+
+**游戏主界面（index.html）：**
+- 新增 `customTierColors`（加载地图时存入，地图为 null 时清空）
+- `getIdleColor(tier)`：有自定义色则返回自定义色，否则返回 `tier.idle`
+- `drawWorld()` idle 状态改用 `getIdleColor(tier)`
+- `buildLegend()` 图例色块改用 `getIdleColor(t)`
+
+---
+
+### v1.1.2 难度互换功能（world_map_generation.html）（2026-05-24）
+
+**需求：** 一键交换两个难度的格子数据与显示颜色，保持像素图视觉不变。
+
+**UI：** 侧边栏新增 **SWAP DIFFICULTIES** 面板（位于 PAINT TOOL 与 TXT IMPORT/EXPORT 之间）。
+- 两个下拉菜单选择要互换的难度，点击 **⇄ Swap** 执行
+- 选同一难度时提示"两个难度相同，无需交换"
+- 成功后底部显示 2.2 秒确认提示
+
+**实现（`swapDifficulties()`）：**
+- 单次遍历 `gridData`，将值 `a` 与值 `b` 原地互换（O(n)）
+- 交换 `tierColors[idA]` ↔ `tierColors[idB]`，保证像素图颜色跟着数据走、视觉完全不变
+- 执行后调用 `buildPalette()`、`drawGrid()`、`updateStatusCounts()`
+
+---
+
+### v1.1.3 HSV 取色器（world_map_generation.html）（2026-05-24）
+
+**需求：** 将原 `<input type="color">` 升级为自定义 HSV 取色器，支持 H/S/V 精确调节；取色期间将参考图透明度临时提升至 100%，关闭后还原。
+
+**UI（弹窗 `#hsv-popup`，`position:fixed;z-index:400`）：**
+- 204×164 SV 方块（canvas）：横轴 = 饱和度，纵轴 = 明度，可拖拽
+- 204×14 色相条（canvas）：横向拖拽改变色相，SV 方块实时重绘
+- H / S / V 数值输入框（0–360 / 0–100 / 0–100）
+- 十六进制输入框（`#rrggbb`，粘贴或手输均支持）
+- 原色 → 新色对比色块
+- **✓ 应用 / ✕ 取消** 按钮；点击弹窗外部 = 应用并关闭
+
+**颜色数学：**
+- `hsvToRgb(h,s,v)` / `rgbToHsv(r,g,b)` / `hexToRgbArr(hex)` / `rgbToHex(r,g,b)`
+
+**实时预览：** 每次 HSV 变化立即更新 `PALETTE[palIdx].color`、`tierColors`、调色板色块、网格画布。
+
+**参考图透明度行为：**
+- `openHsvPicker()`：若参考图模式开启，将 `refImg.opacity` 存入 `hsvPicker.origRefOpacity`，设为 100 并重绘
+- `applyHsvPicker()` / `cancelHsvPicker()`：调用 `_restoreRefOpacity()` 还原透明度并更新输入框数值
+
+**多 tier 切换：** 已有 picker 开着时点击另一 tier 按钮 → 静默保留当前修改，切换到新 tier（透明度保持 100% 直到最终关闭）。
+
+---
+
+### v1.1.4 自定义地图颜色状态语义（index.html）（2026-05-24）
+
+**需求：** 颜色系统调整为：像素图颜色 = 解锁后的"真实"色；未解锁显示该色变浅版本；失败不改色，仅以 ↺ 图标示意。
+
+**新增辅助函数：**
+- `lightenColor(hex, t)`：将 hex 颜色向白色混合 `t` 比例（0=原色，1=纯白）
+- `getWonColor(tier)`：有自定义色则返回原色（完整像素图色），否则返回 `tier.won`
+- `getIdleColor(tier)`：有自定义色则返回 `lightenColor(customColor, 0.45)`，否则返回 `tier.idle`
+
+**drawWorld() 状态颜色映射：**
+
+| 状态 | 有自定义颜色 | 无自定义颜色 |
+|---|---|---|
+| won | 自定义色（完整） | `tier.won` |
+| idle | 自定义色 × 0.55 + 白 × 0.45 | `tier.idle` |
+| lost | 同 idle（颜色不变，仅显示 ↺） | 同 idle |
+| active | `tier.dot` + 脉冲动画 | 同左 |
+
+- `buildLegend()` 图例色块改为 `getWonColor(t)`（展示完整像素色）
+
+---
+
+### v1.1.5 侧边栏滚动修复（world_map_generation.html）（2026-05-24）
+
+- `body` 由 `min-height:100vh` 改为 `height:100vh`：锁定 body 为视口高度，使 `#layout` 高度受约束
+- `#sidebar` 已有 `overflow-y:auto` + `min-height:0`，修复 body 高度后滚动条正常触发
+
+---
+
+### v1.1.6 扫雷游戏界面视觉优化（index.html）（2026-05-24）
+
+**1. 未揭开格子角框简化**
+
+原设计：1px 不对称高光边（上/左青色 + 下/右黑色阴影）+ 四个 L 形角括号。
+
+新设计：
+- 去掉 L 形角括号（8 个矩形绘制调用）
+- 改为一圈均匀细边框（`rgba(0,180,255,α)`，hover 时 α=0.5，默认 α=0.2）
+- 四角各保留一个 **1×1 像素亮点**（`rgba(0,210,255,α)`），模拟电路焊点感
+- hover 时边框与角点同步提亮，交互反馈保留
+
+效果：去除视觉噪声，格子数量多时画面更干净，科技感靠细边框与角点维持。
+
+---
+
+**2. 地雷图标重设计（`drawMineIcon`）**
+
+原设计：半径 `cs/2-2`（接近占满格子）的实心大红球 + 4 根粗十字臂 + 内环描边。
+
+新设计（瞄准镜/目标锁定风格）：
+- 半径缩小至 `cs*0.28`（直径约为格子的 56%，缩小约 45%）
+- **外环**：细描边圆圈（透明度 75%）
+- **8 根刻度线**：以外环为基准向外延伸，4 根主刻度（cardinal 方向，较长）+ 4 根副刻度（diagonal 方向，较短，半透明）
+- **小实心核心**：半径 `r*0.38` 的圆填充
+- **核心高光**：核心左上角小圆白色高光
+- **环境光晕**：以核心为中心的淡色扩散光（透明度 18%）
+
+---
+
+**3. 玩家标记旗图标重设计（flag）**
+
+原设计：青色菱形 + 细杆 + 中心白点（青色系，与科幻雷图标色系一致）。
+
+新设计（科幻红旗风格）：
+- **旗杆**：深红色细线（`#bb1818`），底部横向底座
+- **旗面**：向右的三角形（经典旗帜轮廓），深红填充（`#cc1010`）
+- **旗面高光**：上斜边加 `rgba(255,110,110,0.85)` 描边，模拟金属反光
+- **环境光晕**：旗子上方区域淡红扩散光（透明度 18%）
+- **中心亮点**：格子 ≥12px 时旗面内有小光点（`rgba(255,180,180,0.55)`）
+- 旗杆偏左（`cs*0.36`），留出旗面向右展开的空间
