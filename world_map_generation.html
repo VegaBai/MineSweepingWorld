@@ -156,6 +156,32 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
       <div id="palette"></div>
     </div>
 
+    <!-- Swap Difficulties -->
+    <div class="panel">
+      <div class="panel-title">SWAP DIFFICULTIES</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <select id="swap-a" style="flex:1;background:#0a1428;border:1px solid #1e3050;border-radius:4px;padding:5px 6px;color:#c8d8f0;font-family:inherit;font-size:12px;outline:none;cursor:pointer">
+          <option value="1">EASY</option>
+          <option value="2">NORMAL</option>
+          <option value="3">MEDIUM</option>
+          <option value="4">HARD</option>
+          <option value="5">EXPERT</option>
+          <option value="6">MASTER</option>
+        </select>
+        <span style="color:#6a9ada;font-size:16px;flex-shrink:0;line-height:1">⇄</span>
+        <select id="swap-b" style="flex:1;background:#0a1428;border:1px solid #1e3050;border-radius:4px;padding:5px 6px;color:#c8d8f0;font-family:inherit;font-size:12px;outline:none;cursor:pointer">
+          <option value="1">EASY</option>
+          <option value="2" selected>NORMAL</option>
+          <option value="3">MEDIUM</option>
+          <option value="4">HARD</option>
+          <option value="5">EXPERT</option>
+          <option value="6">MASTER</option>
+        </select>
+      </div>
+      <button class="btn" onclick="swapDifficulties()" style="font-size:12px">⇄ Swap</button>
+      <div id="swap-status" style="font-size:10px;min-height:14px;margin-top:5px;text-align:center"></div>
+    </div>
+
     <!-- TXT Import/Export -->
     <div class="panel">
       <div class="panel-title">TXT IMPORT / EXPORT</div>
@@ -465,6 +491,43 @@ function onTierColorChange(input) {
   if (swatch) swatch.style.background = col;
   drawGrid();
   updateStatusCounts();
+}
+
+// ── Swap difficulties ─────────────────────────────────────────────────────────
+let swapStatusTO = null;
+
+function swapDifficulties() {
+  if (!gridData) return;
+  const a = parseInt(document.getElementById('swap-a').value);
+  const b = parseInt(document.getElementById('swap-b').value);
+  if (a === b) {
+    showSwapStatus('两个难度相同，无需交换', '#f8a070');
+    return;
+  }
+
+  // Swap grid cell values (a ↔ b in-place, single pass)
+  for (let i = 0; i < gridData.length; i++) {
+    if      (gridData[i] === a) gridData[i] = b;
+    else if (gridData[i] === b) gridData[i] = a;
+  }
+
+  // Swap tier colors so the pixel map looks identical after the swap
+  const idA = TIERS[a - 1].id, idB = TIERS[b - 1].id;
+  [tierColors[idA], tierColors[idB]] = [tierColors[idB], tierColors[idA]];
+
+  buildPalette();
+  drawGrid();
+  updateStatusCounts();
+
+  showSwapStatus(`✓ ${TIERS[a-1].label} ↔ ${TIERS[b-1].label} 已交换`);
+}
+
+function showSwapStatus(msg, color = '#6aaa6a') {
+  const el = document.getElementById('swap-status');
+  el.textContent = msg;
+  el.style.color = color;
+  clearTimeout(swapStatusTO);
+  swapStatusTO = setTimeout(() => { el.textContent = ''; }, 2200);
 }
 
 // ── Image processing ─────────────────────────────────────────────────────────
