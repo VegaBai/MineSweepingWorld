@@ -630,35 +630,45 @@ function drawGame() {
     ctx.fillStyle=bg; ctx.fillRect(x,y,cs,cs);
 
     if (!rev) {
-      // Circuit-board edge: cyan top/left accent, black bottom/right shadow
-      const edgeAlpha = hov ? 0.55 : 0.28;
-      ctx.fillStyle=`rgba(0,180,255,${edgeAlpha})`;
-      ctx.fillRect(x,y,cs,1); ctx.fillRect(x,y,1,cs);
-      ctx.fillStyle='rgba(0,0,0,0.7)';
-      ctx.fillRect(x,y+cs-1,cs,1); ctx.fillRect(x+cs-1,y,1,cs);
-      // Corner bracket marks (circuit feel) when cell is big enough
+      // Circuit-board edge: uniform thin border, brighter on hover
+      const edgeAlpha = hov ? 0.5 : 0.2;
+      ctx.strokeStyle=`rgba(0,180,255,${edgeAlpha})`;
+      ctx.lineWidth=1;
+      ctx.strokeRect(x+0.5,y+0.5,cs-1,cs-1);
+      // Single-pixel corner dots for a minimal circuit-pin feel
       if (cs>=10) {
-        const bk=Math.max(2,Math.round(cs*0.22));
-        ctx.fillStyle=`rgba(0,200,255,${hov?0.8:0.4})`;
-        ctx.fillRect(x+2,y+2,bk,1); ctx.fillRect(x+2,y+2,1,bk);
-        ctx.fillRect(x+cs-2-bk,y+2,bk,1); ctx.fillRect(x+cs-3,y+2,1,bk);
-        ctx.fillRect(x+2,y+cs-3,bk,1); ctx.fillRect(x+2,y+cs-2-bk,1,bk);
-        ctx.fillRect(x+cs-2-bk,y+cs-3,bk,1); ctx.fillRect(x+cs-3,y+cs-2-bk,1,bk);
+        ctx.fillStyle=`rgba(0,210,255,${hov?0.9:0.5})`;
+        ctx.fillRect(x+1,y+1,1,1);
+        ctx.fillRect(x+cs-2,y+1,1,1);
+        ctx.fillRect(x+1,y+cs-2,1,1);
+        ctx.fillRect(x+cs-2,y+cs-2,1,1);
       }
 
       if (flag) {
         // Tech flag: cyan diamond marker on thin pole
-        const cx2=x+Math.round(cs*0.5), pTop=y+Math.round(cs*0.1), pBot=y+cs-Math.round(cs*0.15);
-        ctx.fillStyle='#1a6a88';
-        ctx.fillRect(cx2-Math.max(1,Math.round(cs*0.05)),pTop,Math.max(1,Math.round(cs*0.07)),pBot-pTop);
-        const dr=Math.max(3,Math.round(cs*0.27)), dmy=y+Math.round(cs*0.34);
-        ctx.fillStyle='#00c8ff';
-        ctx.beginPath();
-        ctx.moveTo(cx2,dmy-dr); ctx.lineTo(cx2+dr,dmy);
-        ctx.lineTo(cx2,dmy+dr); ctx.lineTo(cx2-dr,dmy);
-        ctx.closePath(); ctx.fill();
-        ctx.fillStyle='rgba(255,255,255,0.55)';
-        ctx.beginPath(); ctx.arc(cx2,dmy,Math.max(1,Math.round(cs*0.09)),0,Math.PI*2); ctx.fill();
+        const px=x+Math.round(cs*0.36), pTop=y+Math.round(cs*0.1), pBot=y+cs-Math.round(cs*0.1);
+        const pw=Math.max(1,Math.round(cs*0.06));
+        ctx.save();
+        // ambient glow
+        ctx.globalAlpha=0.18; ctx.fillStyle='#ff2020';
+        ctx.beginPath(); ctx.arc(px+cs*0.1,pTop+cs*0.18,cs*0.38,0,Math.PI*2); ctx.fill();
+        ctx.globalAlpha=1;
+        // pole
+        ctx.strokeStyle='#bb1818'; ctx.lineWidth=pw; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(px,pTop); ctx.lineTo(px,pBot); ctx.stroke();
+        // base foot
+        ctx.lineWidth=Math.max(1,pw*1.5);
+        ctx.beginPath(); ctx.moveTo(px-Math.round(cs*0.2),pBot); ctx.lineTo(px+Math.round(cs*0.2),pBot); ctx.stroke();
+        // flag body (right-pointing triangle)
+        const fh=Math.round(cs*0.42), fw=Math.round(cs*0.32);
+        ctx.fillStyle='#cc1010';
+        ctx.beginPath(); ctx.moveTo(px,pTop); ctx.lineTo(px+fw,pTop+fh*0.5); ctx.lineTo(px,pTop+fh); ctx.closePath(); ctx.fill();
+        // flag top-edge highlight
+        ctx.strokeStyle='rgba(255,110,110,0.85)'; ctx.lineWidth=Math.max(0.5,pw*0.55);
+        ctx.beginPath(); ctx.moveTo(px,pTop); ctx.lineTo(px+fw,pTop+fh*0.5); ctx.stroke();
+        // small center dot
+        if(cs>=12){ctx.fillStyle='rgba(255,180,180,0.55)'; ctx.beginPath(); ctx.arc(px+fw*0.38,pTop+fh*0.5,Math.max(1,cs*0.05),0,Math.PI*2); ctx.fill();}
+        ctx.restore();
       } else if (mine&&over) {
         drawMineIcon(ctx,x+cs/2,y+cs/2,'#cc3020');
       }
@@ -680,35 +690,38 @@ function drawGame() {
 }
 
 function drawMineIcon(ctx,cx,cy,col) {
-  const r=Math.max(3,cs/2-2);
-  const lw=Math.max(1,r*0.18);
-  // Outer glow ring
+  const r=Math.max(2,cs*0.28);
   ctx.save();
-  ctx.globalAlpha=0.35;
-  ctx.strokeStyle=col; ctx.lineWidth=lw*1.5;
-  ctx.beginPath(); ctx.arc(cx,cy,r*1.25,0,Math.PI*2); ctx.stroke();
+  // Ambient glow
+  ctx.globalAlpha=0.18;
+  ctx.fillStyle=col;
+  ctx.beginPath(); ctx.arc(cx,cy,r*2,0,Math.PI*2); ctx.fill();
   ctx.globalAlpha=1;
-  // 4 crosshair arms extending outward
-  ctx.strokeStyle=col; ctx.lineWidth=lw;
-  const armGap=r*0.18, armLen=r*0.55;
-  for (let a=0;a<4;a++) {
-    const ang=a/4*Math.PI*2;
-    const cos=Math.cos(ang), sin=Math.sin(ang);
+  // Outer targeting ring
+  ctx.strokeStyle=col; ctx.lineWidth=Math.max(0.5,r*0.1);
+  ctx.globalAlpha=0.75;
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+  ctx.globalAlpha=1;
+  // 8 radial tick marks: cardinal=long, diagonal=short
+  for (let i=0;i<8;i++) {
+    const ang=i*Math.PI/4, isMain=i%2===0;
+    const inner=r*1.08, outer=r*(isMain?1.5:1.28);
+    ctx.strokeStyle=col;
+    ctx.lineWidth=Math.max(0.5,r*(isMain?0.12:0.07));
+    ctx.globalAlpha=isMain?1:0.45;
     ctx.beginPath();
-    ctx.moveTo(cx+cos*(r+armGap), cy+sin*(r+armGap));
-    ctx.lineTo(cx+cos*(r+armGap+armLen), cy+sin*(r+armGap+armLen));
+    ctx.moveTo(cx+Math.cos(ang)*inner, cy+Math.sin(ang)*inner);
+    ctx.lineTo(cx+Math.cos(ang)*outer, cy+Math.sin(ang)*outer);
     ctx.stroke();
   }
-  ctx.restore();
-  // Inner filled circle
+  ctx.globalAlpha=1;
+  // Inner core
   ctx.fillStyle=col;
-  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-  // Inner ring cutout
-  ctx.strokeStyle='rgba(0,0,0,0.45)'; ctx.lineWidth=Math.max(1,r*0.25);
-  ctx.beginPath(); ctx.arc(cx,cy,r*0.45,0,Math.PI*2); ctx.stroke();
-  // Highlight
-  ctx.fillStyle='rgba(255,255,255,0.35)';
-  ctx.beginPath(); ctx.arc(cx-r*.3,cy-r*.3,r*.28,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx,cy,r*0.38,0,Math.PI*2); ctx.fill();
+  // Core highlight
+  ctx.fillStyle='rgba(255,255,255,0.45)';
+  ctx.beginPath(); ctx.arc(cx-r*0.13,cy-r*0.13,r*0.15,0,Math.PI*2); ctx.fill();
+  ctx.restore();
 }
 
 // ── Timer ──────────────────────────────────────────────────────────────────
