@@ -4,18 +4,18 @@ import { authenticate } from '../lib/auth.js';
 const TIER_IDS = ['easy', 'normal', 'medium', 'hard', 'expert', 'master'];
 
 const ACHIEVEMENTS = [
-  { id: 'first_win',      icon: '🌱', title: '初出茅庐',   desc: '赢得第一场游戏',                    check: d => d.totalWon >= 1 },
-  { id: 'first_loss',     icon: '💥', title: '踩雷留名',   desc: '第一次踩雷',                        check: d => d.totalLost >= 1 },
-  { id: 'wins_10',        icon: '⚡', title: '熟能生巧',   desc: '累计赢得 10 场游戏',                check: d => d.totalWon >= 10 },
-  { id: 'wins_50',        icon: '🔥', title: '百战之师',   desc: '累计赢得 50 场游戏',                check: d => d.totalWon >= 50 },
-  { id: 'wins_100',       icon: '💎', title: '永不言败',   desc: '累计赢得 100 场游戏',               check: d => d.totalWon >= 100 },
-  { id: 'won_expert',     icon: '🏆', title: '专家认证',   desc: '赢得一场 Expert 难度游戏',          check: d => (d.wonTiers.expert || 0) >= 1 },
-  { id: 'won_master',     icon: '👑', title: '踩雷宗师',   desc: '赢得一场 Master 难度游戏',          check: d => (d.wonTiers.master || 0) >= 1 },
-  { id: 'weeks_3',        icon: '📅', title: '周常老兵',   desc: '参与了 3 张不同的周地图',           check: d => d.weekCount >= 3 },
-  { id: 'top1_week',      icon: '🥇', title: '本周冠军',   desc: '在某周地图中排名第一',              check: d => d.bestRank === 1 },
-  { id: 'top3_week',      icon: '🥉', title: '前三甲',     desc: '在某周地图中排名前三',              check: d => d.bestRank <= 3 && d.bestRank > 0 },
-  { id: 'sweep_easy',     icon: '🌿', title: 'Easy 全清',  desc: '某周地图中赢得所有 Easy 格子',      check: d => !!d.tierSweeps.easy },
-  { id: 'sweep_master',   icon: '🐉', title: 'Master 全清',desc: '某周地图中赢得所有 Master 格子',    check: d => !!d.tierSweeps.master },
+  { id: 'first_win',      icon: '🌱', title: 'First Steps',       description: 'Win your first game',                    check: d => d.totalWon >= 1 },
+  { id: 'first_loss',     icon: '💥', title: 'Brave Soul',        description: 'Hit a mine for the first time',          check: d => d.totalLost >= 1 },
+  { id: 'wins_10',        icon: '⚡', title: 'Getting Good',      description: 'Win 10 games total',                     check: d => d.totalWon >= 10 },
+  { id: 'wins_50',        icon: '🔥', title: 'Battle-Hardened',   description: 'Win 50 games total',                     check: d => d.totalWon >= 50 },
+  { id: 'wins_100',       icon: '💎', title: 'Unstoppable',       description: 'Win 100 games total',                    check: d => d.totalWon >= 100 },
+  { id: 'won_expert',     icon: '🏆', title: 'Expert Certified',  description: 'Win an Expert difficulty game',          check: d => (d.wonTiers.expert || 0) >= 1 },
+  { id: 'won_master',     icon: '👑', title: 'Master of Mines',   description: 'Win a Master difficulty game',           check: d => (d.wonTiers.master || 0) >= 1 },
+  { id: 'weeks_3',        icon: '📅', title: 'Weekly Veteran',    description: 'Play on 3 different weekly maps',        check: d => d.weekCount >= 3 },
+  { id: 'top1_week',      icon: '🥇', title: 'Weekly Champion',   description: 'Rank #1 on any weekly map',              check: d => d.bestRank === 1 },
+  { id: 'top3_week',      icon: '🥉', title: 'Top Three',         description: 'Rank top 3 on any weekly map',           check: d => d.bestRank <= 3 && d.bestRank > 0 },
+  { id: 'sweep_easy',     icon: '🌿', title: 'Easy Sweep',        description: 'Clear all Easy tiles in a weekly map',   check: d => !!d.tierSweeps.easy },
+  { id: 'sweep_master',   icon: '🐉', title: 'Master Sweep',      description: 'Clear all Master tiles in a weekly map', check: d => !!d.tierSweeps.master },
 ];
 
 async function buildAchievementData(userId, db) {

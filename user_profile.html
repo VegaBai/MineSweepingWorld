@@ -156,9 +156,9 @@ a:hover{color:#aaccea}
 
   <!-- Tabs bar -->
   <div id="tabs-bar">
-    <button class="tab-btn active" data-tab="settings" onclick="switchTab('settings')">设置</button>
-    <button class="tab-btn" data-tab="history" onclick="switchTab('history')">游玩记录</button>
-    <button class="tab-btn" data-tab="achievements" onclick="switchTab('achievements')">成就</button>
+    <button class="tab-btn active" data-tab="settings" onclick="switchTab('settings')">Settings</button>
+    <button class="tab-btn" data-tab="history" onclick="switchTab('history')">Play History</button>
+    <button class="tab-btn" data-tab="achievements" onclick="switchTab('achievements')">Achievements</button>
   </div>
 
   <!-- ── Tab: Settings ── -->
@@ -172,7 +172,7 @@ a:hover{color:#aaccea}
         <input type="text" id="display-name-input" maxlength="20" placeholder="Your username">
         <div class="field-hint">Max 20 characters. Shown on the leaderboard.</div>
       </div>
-      <button class="btn primary" onclick="saveSettings()">保存设置</button>
+      <button class="btn primary" onclick="saveSettings()">Save Settings</button>
       <div id="save-status"></div>
     </div>
 
@@ -363,11 +363,11 @@ async function saveSettings() {
     if (displayName) heroDisplay.textContent = displayName;
     document.getElementById('hero-avatar').textContent = AVATAR_MAP[selectedAvatar] ?? AVATAR_MAP.default;
 
-    statusEl.textContent = '✓ 保存成功';
+    statusEl.textContent = '✓ Saved';
     statusEl.className = 'ok';
     setTimeout(() => { statusEl.textContent = ''; }, 3000);
   } catch (e) {
-    statusEl.textContent = '✗ ' + (e.message || '保存失败');
+    statusEl.textContent = '✗ ' + (e.message || 'Failed to save');
     statusEl.className = 'err';
   } finally {
     btn.disabled = false;

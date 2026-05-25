@@ -1296,3 +1296,39 @@ pastWeeks.sort((a, b) => new Date(b.week_start || 0) - new Date(a.week_start || 
 ```
 
 后端 SQL 已有 `ORDER BY m.week_start DESC`，前端排序作为额外保障，避免依赖 Map 插入顺序。当前周始终置顶，不受影响。
+
+---
+
+### v1.1.10 — 个人主页中文汉化全面英文化（2026-05-25）
+
+**变更文件：`user_profile.html`、`api/profile.js`**
+
+**user_profile.html：**
+
+| 位置 | 原文 | 译文 |
+|---|---|---|
+| Tab 标签 | 设置 | Settings |
+| Tab 标签 | 游玩记录 | Play History |
+| Tab 标签 | 成就 | Achievements |
+| 按钮 | 保存设置 | Save Settings |
+| 状态提示 | ✓ 保存成功 | ✓ Saved |
+| 状态提示 | 保存失败 | Failed to save |
+
+**api/profile.js — 12 项成就翻译：**
+
+| id | 原 title | 新 title | 原 desc | 新 description |
+|---|---|---|---|---|
+| first_win | 初出茅庐 | First Steps | 赢得第一场游戏 | Win your first game |
+| first_loss | 踩雷留名 | Brave Soul | 第一次踩雷 | Hit a mine for the first time |
+| wins_10 | 熟能生巧 | Getting Good | 累计赢得 10 场游戏 | Win 10 games total |
+| wins_50 | 百战之师 | Battle-Hardened | 累计赢得 50 场游戏 | Win 50 games total |
+| wins_100 | 永不言败 | Unstoppable | 累计赢得 100 场游戏 | Win 100 games total |
+| won_expert | 专家认证 | Expert Certified | 赢得一场 Expert 难度游戏 | Win an Expert difficulty game |
+| won_master | 踩雷宗师 | Master of Mines | 赢得一场 Master 难度游戏 | Win a Master difficulty game |
+| weeks_3 | 周常老兵 | Weekly Veteran | 参与了 3 张不同的周地图 | Play on 3 different weekly maps |
+| top1_week | 本周冠军 | Weekly Champion | 在某周地图中排名第一 | Rank #1 on any weekly map |
+| top3_week | 前三甲 | Top Three | 在某周地图中排名前三 | Rank top 3 on any weekly map |
+| sweep_easy | Easy 全清 | Easy Sweep | 某周地图中赢得所有 Easy 格子 | Clear all Easy tiles in a weekly map |
+| sweep_master | Master 全清 | Master Sweep | 某周地图中赢得所有 Master 格子 | Clear all Master tiles in a weekly map |
+
+**顺带修复 Bug：** 成就字段名 `desc` 改为 `description`，与前端 `renderAchCard` 中读取的 `ach.description` 对齐（此前成就描述在页面上始终为空）。
