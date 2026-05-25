@@ -552,17 +552,17 @@ function drawWorld() {
     }
 
     let fill;
-    if      (st==='won')    fill=getWonColor(tier);
-    else if (st==='active') fill=tier.dot;
-    else                    fill=getIdleColor(tier);
+    if (st==='won') fill=getWonColor(tier);
+    else            fill=getIdleColor(tier);
 
     ctx.fillStyle=fill; ctx.fillRect(sx,sy,tw,th);
 
     if (st==='active') {
-      ctx.fillStyle=`rgba(255,255,255,${0.08+0.14*pulse})`;
-      ctx.fillRect(sx,sy,tw,th);
-      const bw=Math.max(1,Math.round(tw*0.07));
-      ctx.strokeStyle=`rgba(255,255,255,${0.35+0.4*pulse})`;
+      const bw=Math.max(1,Math.round(tw*0.08));
+      const borderColor=customTierColors?.[tier.id] ?? tier.border;
+      const n=parseInt(borderColor.slice(1),16);
+      const r=(n>>16)&255,g2=(n>>8)&255,b2=n&255;
+      ctx.strokeStyle=`rgba(${r},${g2},${b2},${0.6+0.4*pulse})`;
       ctx.lineWidth=bw;
       ctx.strokeRect(sx+bw/2,sy+bw/2,tw-bw,th-bw);
     }

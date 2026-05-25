@@ -379,14 +379,17 @@ async function loadHistory() {
   const container = document.getElementById('history-content');
   try {
     const data = await apiFetch('/api/profile?resource=history');
-    const weeks = data.weeks ?? data ?? [];
+    const { currentWeek, pastWeeks = [] } = data;
 
-    if (!weeks.length) {
+    if (!currentWeek && !pastWeeks.length) {
       container.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div>No play history yet. Start a game to record your progress!</div>`;
       return;
     }
 
-    container.innerHTML = weeks.map((week, idx) => renderWeekCard(week, idx === 0)).join('');
+    const cards = [];
+    if (currentWeek) cards.push(renderWeekCard(currentWeek, true));
+    cards.push(...pastWeeks.map(week => renderWeekCard(week, false)));
+    container.innerHTML = cards.join('');
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠</div>Failed to load history.</div>`;
   }
@@ -448,10 +451,10 @@ async function loadAchievements() {
     const achievements = data.achievements ?? [];
     const stats        = data.stats ?? {};
 
-    const totalWon    = stats.total_won          ?? 0;
-    const totalLost   = stats.total_lost         ?? 0;
-    const weeksPlayed = stats.participated_weeks ?? 0;
-    const bestRank    = stats.best_rank          ?? '—';
+    const totalWon    = stats.totalWon   ?? 0;
+    const totalLost   = stats.totalLost  ?? 0;
+    const weeksPlayed = stats.weekCount  ?? 0;
+    const bestRank    = stats.bestRank   ?? '—';
 
     const statsHtml = `
       <div id="stats-row">
@@ -474,7 +477,7 @@ async function loadAchievements() {
 }
 
 function renderAchCard(ach) {
-  const earned = !!ach.earned_at;
+  const earned = !!ach.earned;
   const overlay = earned
     ? `<div class="ach-check">✓</div>`
     : `<div class="ach-lock">🔒</div>`;
