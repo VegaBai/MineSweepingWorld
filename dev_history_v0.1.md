@@ -1332,3 +1332,14 @@ pastWeeks.sort((a, b) => new Date(b.week_start || 0) - new Date(a.week_start || 
 | sweep_master | Master 全清 | Master Sweep | 某周地图中赢得所有 Master 格子 | Clear all Master tiles in a weekly map |
 
 **顺带修复 Bug：** 成就字段名 `desc` 改为 `description`，与前端 `renderAchCard` 中读取的 `ach.description` 对齐（此前成就描述在页面上始终为空）。
+
+---
+
+### v1.1.11 — 首页右上角用户菜单英文化（2026-05-25）
+
+**变更文件：`index.html`**
+
+| 原文 | 译文 |
+|---|---|
+| 👤 个人主页 | 👤 Profile |
+| 🚪 退出 | 🚪 Log Out |
