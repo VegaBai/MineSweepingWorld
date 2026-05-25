@@ -380,6 +380,7 @@ async function loadHistory() {
   try {
     const data = await apiFetch('/api/profile?resource=history');
     const { currentWeek, pastWeeks = [] } = data;
+    pastWeeks.sort((a, b) => new Date(b.week_start || 0) - new Date(a.week_start || 0));
 
     if (!currentWeek && !pastWeeks.length) {
       container.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div>No play history yet. Start a game to record your progress!</div>`;

@@ -1255,3 +1255,44 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar       TEXT DEFAULT 'default';
 - 新增闪烁描边框：使用该 tier 的 `border` 颜色（或自定义色），透明度在 0.6–1.0 之间随 `pulse` 脉冲
 
 视觉效果：active 格子与 idle 格子背景完全相同，仅靠闪烁彩色描边区分正在进行的游戏。
+
+---
+
+### v1.1.9 — 世界地图 idle 格子白色内框 + Tooltip 状态信息 + 游玩记录倒序（2026-05-25）
+
+**需求：**
+- 世界地图中未开始格子与已完成格子颜色有时过于相近，需要更明显的视觉区分
+- 鼠标悬停 Tooltip 加入当前格子的游玩状态信息
+- 个人主页游玩记录按时间倒序排列
+
+**1. idle 格子白色内框（index.html `drawWorld()`）**
+
+当格子宽度 ≥ 4px 时，在 `idle` 状态格子内绘制一圈细白色内描边：
+- 描边宽度：`max(1, round(tw × 0.07))`
+- 颜色：`rgba(255,255,255,0.28)`（低透明度，不喧宾夺主）
+- 仅对 `idle` 格子生效，`active`/`won`/`lost` 格子不变
+
+视觉效果：未开始格子在内侧有轻微白色边框轮廓，与已完成格子的实色区分更清晰。
+
+**2. Tooltip 状态信息（index.html `showTT()`）**
+
+Tooltip 新增第三行，展示格子的游玩状态（文字 + 对应颜色）：
+
+| 状态 | 文字 | 颜色 |
+|---|---|---|
+| `idle` | 未开始 | `#778`（灰） |
+| `active` | 正在进行 | `#4af`（青蓝） |
+| `won` | 已完成 | `#4c4`（绿） |
+| `lost` | 需重开 | `#f84`（橙） |
+
+HTML 新增 `<div class="tt-status" id="tt-status">`，CSS 新增 `.tt-status { font-size:11px; margin-top:1px }`。
+
+**3. 游玩记录倒序（user_profile.html `loadHistory()`）**
+
+从 API 拿到 `pastWeeks` 后，前端显式排序：
+
+```js
+pastWeeks.sort((a, b) => new Date(b.week_start || 0) - new Date(a.week_start || 0));
+```
+
+后端 SQL 已有 `ORDER BY m.week_start DESC`，前端排序作为额外保障，避免依赖 Map 插入顺序。当前周始终置顶，不受影响。
