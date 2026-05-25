@@ -1224,3 +1224,34 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar       TEXT DEFAULT 'default';
 - **环境光晕**：旗子上方区域淡红扩散光（透明度 18%）
 - **中心亮点**：格子 ≥12px 时旗面内有小光点（`rgba(255,180,180,0.55)`）
 - 旗杆偏左（`cs*0.36`），留出旗面向右展开的空间
+
+---
+
+### v1.1.7 — 个人主页游玩记录与成就三处前端 Bug 修复（2026-05-25）
+
+**现象：** 游玩记录 Tab 始终显示"No play history yet"；成就 Tab 所有统计数字为 0，所有成就显示未解锁。
+
+**原因与修复（user_profile.html）：**
+
+| Bug | 原因 | 修复 |
+|---|---|---|
+| 游玩记录不显示 | `loadHistory()` 读取 `data.weeks`，但 API 实际返回 `{ currentWeek, pastWeeks }` | 改为解构 `{ currentWeek, pastWeeks = [] }`，分别渲染当前周和历史周卡片 |
+| 成就统计全为 0 | 前端读取 `stats.total_won / stats.participated_weeks / stats.best_rank`，但 API 返回 camelCase `stats.totalWon / stats.weekCount / stats.bestRank` | 字段名改为 camelCase |
+| 成就全显示未解锁 | `renderAchCard()` 检查 `!!ach.earned_at`（不存在的字段），API 实际返回 `ach.earned: true/false` | 改为 `!!ach.earned` |
+
+---
+
+### v1.1.8 — 世界地图 active 格子背景颜色修复 + 闪烁描边框（2026-05-25）
+
+**需求：**
+- 未完成的格子（active 状态）返回世界地图时背景颜色应与未开始格子（idle）一致，不应改变
+- 新增闪烁描边框以标识正在进行中的格子
+
+**原因：** `drawWorld()` 中 `active` 状态使用 `tier.dot` 作为填充色（比 idle 更亮的中间色），加上白色透明叠加层，导致视觉上背景颜色明显变化。
+
+**修复（index.html `drawWorld()`）：**
+- `active` 状态填充色改为 `getIdleColor(tier)`，与 idle 格子完全一致
+- 移除白色 `fillRect` 叠加层（该叠加原本是动画效果的一部分，同时改变了背景色）
+- 新增闪烁描边框：使用该 tier 的 `border` 颜色（或自定义色），透明度在 0.6–1.0 之间随 `pulse` 脉冲
+
+视觉效果：active 格子与 idle 格子背景完全相同，仅靠闪烁彩色描边区分正在进行的游戏。
