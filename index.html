@@ -39,6 +39,7 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #world-tooltip{position:fixed;display:none;background:rgba(8,14,34,.96);border:1px solid #2a4070;border-radius:6px;padding:8px 14px;font-size:12px;pointer-events:none;z-index:20;line-height:2;white-space:nowrap}
 #world-tooltip .tt-lbl{font-weight:bold}
 #world-tooltip .tt-sub{color:#778;font-size:11px}
+#world-tooltip .tt-status{font-size:11px;margin-top:1px}
 
 /* ── Auth Modal ── */
 #auth-overlay{position:fixed;inset:0;background:rgba(0,0,8,.82);display:none;align-items:center;justify-content:center;z-index:80;backdrop-filter:blur(6px)}
@@ -138,7 +139,7 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
     <div style="margin-top:6px;font-size:10px;color:#9070d8;line-height:1.5">✨ Win higher tiers to earn<br>credits for illuminating lower grids</div>
     <div id="hud-legend" style="margin-top:4px;display:flex;flex-direction:column;gap:3px"></div>
   </div>
-  <div id="world-tooltip"><div class="tt-lbl" id="tt-label"></div><div class="tt-sub" id="tt-size"></div></div>
+  <div id="world-tooltip"><div class="tt-lbl" id="tt-label"></div><div class="tt-sub" id="tt-size"></div><div class="tt-status" id="tt-status"></div></div>
   <div id="active-banner" onclick="resumeActive()">
     ▶ Last game at (<span id="banner-coord">0,0</span>) — click to resume
   </div>
@@ -557,6 +558,12 @@ function drawWorld() {
 
     ctx.fillStyle=fill; ctx.fillRect(sx,sy,tw,th);
 
+    if (st==='idle' && tw>=4) {
+      const iw=Math.max(1,Math.round(tw*0.07));
+      ctx.strokeStyle='rgba(255,255,255,0.28)';
+      ctx.lineWidth=iw;
+      ctx.strokeRect(sx+iw/2,sy+iw/2,tw-iw,th-iw);
+    }
     if (st==='active') {
       const bw=Math.max(1,Math.round(tw*0.08));
       const borderColor=customTierColors?.[tier.id] ?? tier.border;
@@ -1176,9 +1183,15 @@ function showTT(gx,gy) {
   const g=store.get(gKey(gx,gy));
   const tier=g?g.tier:gridTier(gx,gy);
   if (!tier) return; // background tile — no tooltip
+  const st=g?g.status:'idle';
+  const statusText={idle:'未开始',active:'正在进行',won:'已完成',lost:'需重开'};
+  const statusColor={idle:'#778',active:'#4af',won:'#4c4',lost:'#f84'};
   document.getElementById('tt-label').style.color=tier.dot;
   document.getElementById('tt-label').textContent=tier.label;
   document.getElementById('tt-size').textContent=`${tier.cols}×${tier.rows}  ·  ${Math.round(tier.rate*100)}% mines`;
+  const stEl=document.getElementById('tt-status');
+  stEl.textContent=statusText[st]??st;
+  stEl.style.color=statusColor[st]??'#778';
   const el=document.getElementById('world-tooltip'), m=14;
   el.style.left=(ttMx+m)+'px'; el.style.top=(ttMy+m)+'px'; el.style.display='block';
   const r=el.getBoundingClientRect();
