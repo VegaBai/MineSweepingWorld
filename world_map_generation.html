@@ -116,6 +116,10 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
 #hsv-cancel-btn:hover{background:#111c38}
 .tier-color-btn{width:22px;height:18px;border-radius:2px;border:1px solid rgba(255,255,255,.2);cursor:pointer;flex-shrink:0;padding:0;outline:none;transition:border-color .12s}
 .tier-color-btn:hover{border-color:rgba(255,255,255,.5)}
+#hsv-eyedropper-btn{flex:0 0 auto;padding:5px 8px;font-size:13px;border-radius:4px;cursor:pointer;font-family:inherit;border:1px solid #1e3050;background:#0a1220;color:#8ab;transition:background .12s,border-color .12s;line-height:1}
+#hsv-eyedropper-btn:hover{background:#111c38}
+#hsv-eyedropper-btn.active{background:#1a3a7a;border-color:#2a5aaa;color:#aaccea}
+body.eyedropping #grid-canvas{cursor:crosshair !important}
 </style>
 </head>
 <body>
@@ -293,10 +297,12 @@ body{background:#090912;color:#c8c8e0;font-family:'Consolas','Courier New',monos
     <span class="hsv-arrow">→</span>
     <div id="hsv-prev-new" class="hsv-swatch" title="新色"></div>
   </div>
-  <div class="hsv-btn-row">
+  <div class="hsv-btn-row" style="margin-bottom:7px">
+    <button id="hsv-eyedropper-btn" onclick="toggleEyedropper()" title="从画布取色">🔬</button>
     <button id="hsv-apply-btn"  class="hsv-btn" onclick="applyHsvPicker()">✓ 应用</button>
     <button id="hsv-cancel-btn" class="hsv-btn" onclick="cancelHsvPicker()">✕ 取消</button>
   </div>
+  <div id="hsv-eyedropper-hint" style="font-size:10px;color:#6a9ab8;text-align:center;min-height:13px;display:none">点击画布取色</div>
 </div>
 
 <script>
@@ -486,6 +492,21 @@ function cellFromEvent(e) {
 
 canvas.addEventListener('mousedown', e => {
   if (!gridData) return;
+  if (hsvPicker.eyedropping) {
+    // Sample pixel color from canvas at click point
+    const r = canvas.getBoundingClientRect();
+    const px = Math.floor((e.clientX - r.left) * (canvas.width  / r.width));
+    const py = Math.floor((e.clientY - r.top)  * (canvas.height / r.height));
+    const [red, green, blue] = ctx.getImageData(px, py, 1, 1).data;
+    const hex = rgbToHex(red, green, blue);
+    [hsvPicker.h, hsvPicker.s, hsvPicker.v] = rgbToHsv(red, green, blue);
+    hsvLiveUpdate();
+    syncHsvUI();
+    document.getElementById('hsv-prev-old').style.background = hex;
+    _setEyedropping(false);
+    e.preventDefault();
+    return;
+  }
   isPainting = true;
   const [cx, cy] = cellFromEvent(e);
   paintCell(cx, cy);
@@ -543,6 +564,7 @@ const hsvPicker = {
   origRefOpacity: null, // saved ref opacity (null = ref wasn't active)
   h: 0, s: 100, v: 100,
   svDrag: false, hueDrag: false,
+  eyedropping: false,
 };
 
 // ── Color math ────────────────────────────────────────────────────────────────
@@ -764,7 +786,21 @@ function _restoreRefOpacity() {
   }
 }
 
+function _setEyedropping(on) {
+  hsvPicker.eyedropping = on;
+  document.body.classList.toggle('eyedropping', on);
+  const btn = document.getElementById('hsv-eyedropper-btn');
+  const hint = document.getElementById('hsv-eyedropper-hint');
+  if (btn) btn.classList.toggle('active', on);
+  if (hint) hint.style.display = on ? '' : 'none';
+}
+
+function toggleEyedropper() {
+  _setEyedropping(!hsvPicker.eyedropping);
+}
+
 function applyHsvPicker() {
+  _setEyedropping(false);
   _restoreRefOpacity();
   updateStatusCounts();
   document.getElementById('hsv-popup').style.display = 'none';
@@ -772,6 +808,7 @@ function applyHsvPicker() {
 }
 
 function cancelHsvPicker() {
+  _setEyedropping(false);
   const { palIdx, origColor } = hsvPicker;
   if (palIdx > 0) {
     PALETTE[palIdx].color = origColor;
@@ -790,12 +827,13 @@ function cancelHsvPicker() {
   hsvPicker.palIdx = -1;
 }
 
-// Close picker when clicking outside it
+// Close picker when clicking outside it (but not canvas in eyedropper mode)
 document.addEventListener('mousedown', e => {
   const popup = document.getElementById('hsv-popup');
   if (popup.style.display === 'none') return;
   if (popup.contains(e.target)) return;
   if (e.target.classList.contains('tier-color-btn')) return; // let onclick handle
+  if (e.target === canvas && hsvPicker.eyedropping) return;  // eyedropper handles canvas click
   applyHsvPicker(); // outside click = apply & close
 });
 
