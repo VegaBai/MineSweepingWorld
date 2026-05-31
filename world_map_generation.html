@@ -232,11 +232,18 @@ body.eyedropping #grid-canvas{cursor:crosshair !important}
     <!-- Save to DB -->
     <div class="panel">
       <div class="panel-title">SAVE TO DATABASE</div>
+      <div id="editing-badge" style="display:none;font-size:10px;color:#c090f0;background:#2a1060;border:1px solid #6030a0;border-radius:4px;padding:3px 7px;margin-bottom:8px;align-items:center;gap:5px">
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="editing-badge-name"></span>
+        <button onclick="clearEditingMap()" style="background:none;border:none;color:#c090f0;cursor:pointer;font-size:12px;line-height:1;padding:0" title="New map (stop editing)">✕</button>
+      </div>
       <div class="field">
         <label>MAP NAME</label>
         <input type="text" id="map-name" placeholder="My world map…" maxlength="60">
       </div>
-      <button class="btn success" id="save-btn" onclick="saveMap()" disabled>Save Map</button>
+      <div class="btn-row">
+        <button class="btn success" id="save-btn" onclick="saveMap()" disabled>Save Map</button>
+        <button class="btn" id="save-new-btn" onclick="saveMapAsNew()" disabled style="display:none">Save as New</button>
+      </div>
       <div id="save-status" style="font-size:11px;color:#6aaa6a;min-height:16px;margin-top:6px;text-align:center"></div>
     </div>
 
@@ -402,6 +409,7 @@ const ctx = canvas.getContext('2d');
 function newGrid() {
   const w = Math.max(2, Math.min(200, parseInt(document.getElementById('new-grid-w').value) || 20));
   const h = Math.max(2, Math.min(200, parseInt(document.getElementById('new-grid-h').value) || 16));
+  clearEditingMap();
   initGrid(w, h);
   updateStatusCounts();
 }
@@ -1076,6 +1084,7 @@ function kmeansRun(points, initCenters, maxIter) {
 
 // ── Grid controls ────────────────────────────────────────────────────────────
 function clearGrid() {
+  clearEditingMap();
   if (!gridData) { initGrid(WORLD_W, WORLD_H); return; }
   gridData.fill(0);
   tierColors = { ...DEFAULT_TIER_COLORS };
@@ -1113,6 +1122,7 @@ function importTxt(e) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
+    clearEditingMap();
     const allLines = ev.target.result.split('\n');
     // Parse COLORS comment if present
     const colorLine = allLines.find(l => /^#\s*COLORS\b/.test(l));
@@ -1151,41 +1161,84 @@ function importTxt(e) {
 }
 
 // ── DB Save / Load ────────────────────────────────────────────────────────────
+let editingMapId = null;  // non-null when an existing map is loaded for editing
+
 function updateSaveBtn() {
-  document.getElementById('save-btn').disabled = !gridData;
+  const has = !!gridData;
+  document.getElementById('save-btn').disabled = !has;
+  const newBtn = document.getElementById('save-new-btn');
+  newBtn.disabled = !has;
+  newBtn.style.display = editingMapId ? '' : 'none';
 }
 
-async function saveMap() {
+function _setEditingMap(id, name) {
+  editingMapId = id;
+  const badge = document.getElementById('editing-badge');
+  if (id) {
+    document.getElementById('editing-badge-name').textContent = '✏ ' + name;
+    badge.style.display = 'flex';
+    document.getElementById('save-btn').textContent = 'Update Map';
+  } else {
+    badge.style.display = 'none';
+    document.getElementById('save-btn').textContent = 'Save Map';
+  }
+  updateSaveBtn();
+}
+
+function clearEditingMap() {
+  _setEditingMap(null, '');
+}
+
+async function _doSaveMap(forceNew = false) {
   if (!gridData) return;
   const name = document.getElementById('map-name').value.trim();
   if (!name) { document.getElementById('map-name').focus(); return; }
 
-  const btn = document.getElementById('save-btn');
+  const btn = forceNew ? document.getElementById('save-new-btn') : document.getElementById('save-btn');
   const status = document.getElementById('save-status');
   btn.disabled = true;
   btn.textContent = 'Saving…';
   status.textContent = '';
+  status.style.color = '#6aaa6a';
+
+  const payload = { name, data: Array.from(gridData), width: gridW, height: gridH, colors: tierColors };
+  const isUpdate = editingMapId && !forceNew;
 
   try {
-    await apiFetch('/admin?resource=worldmap', {
-      method: 'POST',
-      body: JSON.stringify({ name, data: Array.from(gridData), width: gridW, height: gridH, colors: tierColors }),
-    });
-    btn.textContent = '✓ Saved';
-    status.textContent = 'Map saved successfully';
+    if (isUpdate) {
+      await apiFetch('/admin?resource=worldmap', {
+        method: 'PUT',
+        body: JSON.stringify({ ...payload, id: editingMapId }),
+      });
+      btn.textContent = '✓ Updated';
+      status.textContent = 'Map updated';
+    } else {
+      await apiFetch('/admin?resource=worldmap', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      btn.textContent = '✓ Saved';
+      status.textContent = 'Saved as new map';
+      clearEditingMap();
+    }
     loadSavedMaps();
   } catch (e) {
-    btn.textContent = 'Save Map';
+    btn.textContent = isUpdate ? 'Update Map' : 'Save Map';
     status.style.color = '#f88';
     status.textContent = 'Save failed: ' + e.message;
   } finally {
     setTimeout(() => {
       btn.disabled = false;
-      btn.textContent = 'Save Map';
+      btn.textContent = editingMapId ? 'Update Map' : 'Save Map';
+      document.getElementById('save-new-btn').disabled = false;
+      document.getElementById('save-new-btn').textContent = 'Save as New';
       status.style.color = '#6aaa6a';
     }, 2000);
   }
 }
+
+function saveMap()      { _doSaveMap(false); }
+function saveMapAsNew() { _doSaveMap(true);  }
 
 function getNextMondayUTC() {
   const now=new Date();
@@ -1262,7 +1315,6 @@ async function loadMapToEditor(id) {
   try {
     const { map: mapData } = await apiFetch(`/admin?resource=worldmap&id=${id}`);
     if (!mapData) return;
-    // Restore saved colors or fall back to defaults
     tierColors = (mapData.colors && typeof mapData.colors === 'object')
       ? { ...DEFAULT_TIER_COLORS, ...mapData.colors }
       : { ...DEFAULT_TIER_COLORS };
@@ -1273,6 +1325,7 @@ async function loadMapToEditor(id) {
     drawGrid();
     updateStatusCounts();
     document.getElementById('map-name').value = mapData.name;
+    _setEditingMap(id, mapData.name);
   } catch (e) {
     alert('Failed to load map: ' + e.message);
   }

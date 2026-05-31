@@ -74,6 +74,17 @@ async function handleWorldmap(req, res, user, db) {
     );
     return res.status(201).json({ map: r.rows[0] });
   }
+  if (req.method === 'PUT') {
+    const { id, name, data, width = 20, height = 16, colors } = req.body ?? {};
+    if (!id || !name || !data) return res.status(400).json({ error: 'id, name and data required' });
+    const r = await db.query(
+      `UPDATE world_maps SET name=$1, data=$2, width=$3, height=$4, colors=$5
+       WHERE id=$6 RETURNING id, name, width, height, is_active, created_at`,
+      [name, JSON.stringify(data), width, height, colors ? JSON.stringify(colors) : null, id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'not found' });
+    return res.json({ map: r.rows[0] });
+  }
   if (req.method === 'PATCH') {
     const { id, is_active, scheduled_at } = req.body ?? {};
     if (!id) return res.status(400).json({ error: 'id required' });
